@@ -129,12 +129,18 @@ export default function App() {
     }
   };
 
+  const closePanel = () => {
+    setSelCell(null);
+    setSelPile(null);
+    setSearchQ("");
+  };
+
   const savePile = async () => {
     if (!selPile) return;
     const updatedPile = { ...piles[selPile], ...form, date: form.date || new Date().toISOString().slice(0, 10) };
     try {
       await updateDoc(docRef, { [selPile]: updatedPile });
-      setSelPile(null); setForm(null); setSearchQ("");
+      closePanel();
     } catch (error) {
       alert("ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่");
     }
@@ -162,7 +168,6 @@ export default function App() {
     const dim = filter !== "all" && p.s !== filter;
     const isSel = selPile === id;
     const isSearched = searchQ && String(id) === searchQ;
-    // ✅ อัปเกรด 1: เพิ่มขนาดจุด (Base size จาก 8 เป็น 12)
     const sz = Math.round(12 * zoom);
 
     return (
@@ -193,7 +198,6 @@ export default function App() {
     const isMainColumn = colIdx % 2 === 0;
     const isSel = selCell?.rowId === rowId && selCell?.colIdx === colIdx;
 
-    // ปรับสัดส่วน Cell ให้สัมพันธ์กับจุดที่ใหญ่ขึ้น
     const dotSz = Math.round(12 * zoom);
     const gap = Math.round(4 * zoom);
     const pad = Math.round(12 * zoom);
@@ -238,9 +242,11 @@ export default function App() {
     );
   }
 
+  // ตัวแปรเช็คว่าแผงควบคุมควรแสดงไหม (มีเลือกอะไรสักอย่างอยู่)
+  const isPanelOpen = selCell || selPile;
+
   return (
     <div style={{ fontFamily: "'IBM Plex Mono', monospace", height: "100vh", background: "#080a10", color: "#cdd1e0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      {/* ✅ อัปเกรด 2: CSS สำหรับระบบ Responsive บนมือถือ */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sarabun:wght@400;600;700&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
@@ -254,17 +260,65 @@ export default function App() {
         .inp:focus{border-color:#16703a}
         
         /* Layout หลัก */
-        .main-content { flex: 1; display: flex; flex-direction: row; overflow: hidden; }
-        .side-panel { width: 300px; border-left: 1px solid #111420; background: #060810; display: flex; flex-direction: column; flex-shrink: 0; }
+        .main-content { flex: 1; display: flex; flex-direction: row; overflow: hidden; position: relative; }
         .controls-bar { border-bottom: 1px solid #111420; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; flex-wrap: wrap; justify-content: space-between; }
         
-        /* มือถือ (จอเล็กกว่า 768px) */
+        /* พื้นหลังมืด (Backdrop) ซ่อนไว้ก่อน */
+        .backdrop { display: none; }
+        
+        /* แผงควบคุม (Desktop) */
+        .side-panel { width: 300px; border-left: 1px solid #111420; background: #060810; display: flex; flex-direction: column; flex-shrink: 0; z-index: 10; }
+        .mobile-drag-handle { display: none; }
+        
+        /* Responsive สำหรับมือถือ (จอเล็กกว่า 768px) */
         @media (max-width: 768px) {
-          .main-content { flex-direction: column; }
-          .side-panel { width: 100%; border-left: none; border-top: 1px solid #111420; height: 45vh; z-index: 100; box-shadow: 0 -5px 15px rgba(0,0,0,0.5); }
           .controls-bar { flex-direction: column; align-items: stretch; gap: 12px; }
           .stat-box { flex: 1; text-align: center; }
           .search-box { width: 100%; margin-left: 0 !important; margin-top: 8px; justify-content: space-between; }
+          
+          /* พื้นหลังมืดเวลา Bottom Sheet เด้งขึ้นมา */
+          .backdrop {
+            display: block;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(2px);
+            z-index: 998;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+          }
+          .backdrop.open {
+            opacity: 1;
+            pointer-events: auto;
+          }
+
+          /* แผงควบคุมกลายเป็น Bottom Sheet */
+          .side-panel {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            width: 100%;
+            height: auto;
+            max-height: 85vh;
+            border-left: none;
+            border-top: 1px solid #2a3045;
+            border-radius: 20px 20px 0 0;
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
+            z-index: 999;
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1);
+          }
+          .side-panel.open {
+            transform: translateY(0);
+          }
+          .mobile-drag-handle {
+            display: block;
+            width: 40px;
+            height: 5px;
+            background: #333c5a;
+            border-radius: 3px;
+            margin: 12px auto 5px;
+          }
         }
 
         @keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
@@ -312,20 +366,17 @@ export default function App() {
       {/* BODY */}
       <div className="main-content">
 
-        {/* GRID */}
+        {/* GRID Area (ใช้พื้นที่ 100% เสมอ) */}
         <div style={{ flex: 1, overflow: "auto", padding: "16px 20px" }}>
           <div style={{ display: "inline-block", minWidth: "max-content", paddingRight: "40px", paddingBottom: "40px" }}>
             {(() => {
               const dotSz = Math.round(12 * zoom);
               const gap3 = Math.round(4 * zoom);
               const pad = Math.round(12 * zoom);
-
               const cellW = (ci, rowType) => {
                 const horiz = f2IsHorizontal(ci, rowType);
                 return horiz ? (dotSz * 2 + gap3 + pad * 2) : (dotSz + pad * 2);
               };
-
-              // ขยายช่องว่างสำหรับป้ายชื่อ
               const LABEL_W = 40;
               const colSlotW = Array.from({ length: 41 }, (_, ci) => cellW(ci, "edge"));
 
@@ -337,7 +388,6 @@ export default function App() {
                       return (
                         <div key={ci} style={{
                           width: colSlotW[ci], flexShrink: 0, textAlign: "center",
-                          // ✅ อัปเกรด 1.2: เพิ่มขนาดตัวอักษร Grid คอลัมน์ (1, 2, 3)
                           fontSize: Math.max(10, Math.round(11 * zoom)),
                           color: isMain ? "#4a5580" : "#1e2338",
                           fontWeight: isMain ? 700 : 400,
@@ -353,7 +403,6 @@ export default function App() {
                       <div key={meta.id} style={{ display: "flex", alignItems: "center" }}>
                         <div style={{
                           width: LABEL_W, flexShrink: 0,
-                          // ✅ อัปเกรด 1.3: เพิ่มขนาดตัวอักษร Grid แถว (A, B, C)
                           fontSize: Math.max(11, Math.round(13 * zoom)),
                           fontWeight: meta.type !== "inter" ? 700 : 400,
                           color: meta.type !== "inter" ? "#5a6090" : "#1e2338",
@@ -376,14 +425,20 @@ export default function App() {
           </div>
         </div>
 
-        {/* SIDE PANEL (แผงควบคุมด้านข้าง / หรือด้านล่างในมือถือ) */}
-        <div className="side-panel">
+        {/* ✅ อัปเกรด: เพิ่มพื้นหลังมืด (กดเพื่อปิดแผงควบคุมได้) */}
+        <div className={`backdrop ${isPanelOpen ? 'open' : ''}`} onClick={closePanel}></div>
+
+        {/* SIDE PANEL (แบบ Bottom Sheet สไลด์ขึ้นบนมือถือ) */}
+        <div className={`side-panel ${isPanelOpen ? 'open' : ''}`}>
+          {/* ขีดจับด้านบน สำหรับมือถือ */}
+          <div className="mobile-drag-handle" onClick={closePanel}></div>
+
           {selCell && !selPile && (
             <div style={{ padding: 16, borderBottom: "1px solid #111420", animation: "slideIn .15s ease" }}>
               <div style={{ fontSize: 10, color: "#1e2235", letterSpacing: 2, marginBottom: 5 }}>FOOTING SELECTED</div>
-              <div style={{ fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 18, color: "#fbbf24", marginBottom: 8 }}>
-                แถว {selCell.rowId} · Col {COL_LABELS[selCell.colIdx]}
-                <span style={{ marginLeft: 8, fontSize: 12, color: selCell.pileIds.length === 2 ? "#60a5fa" : "#a78bfa", fontWeight: 400 }}>
+              <div style={{ fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 18, color: "#fbbf24", marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
+                <span>แถว {selCell.rowId} · Col {COL_LABELS[selCell.colIdx]}</span>
+                <span style={{ fontSize: 12, color: selCell.pileIds.length === 2 ? "#60a5fa" : "#a78bfa", fontWeight: 400, background: "#141825", padding: "2px 8px", borderRadius: 4 }}>
                   F{selCell.pileIds.length} {selCell.pileIds.length === 2 ? (f2IsHorizontal(selCell.colIdx, ROWS_META.find(r => r.id === selCell.rowId).type) ? "C1" : "C2") : ""}
                 </span>
               </div>
@@ -414,7 +469,7 @@ export default function App() {
                   <div style={{ fontSize: 10, color: "#1e2235", letterSpacing: 2 }}>บันทึกข้อมูล</div>
                   <div style={{ fontFamily: "'Sarabun',sans-serif", fontSize: 20, fontWeight: 700, color: "#fbbf24" }}>เสาเข็ม #{selPile}</div>
                 </div>
-                <button onClick={() => { setSelPile(null); setForm(null); setSearchQ(""); }} style={{ background: "none", border: "none", color: "#333c5a", cursor: "pointer", fontSize: 20, padding: 5 }}>✕</button>
+                <button onClick={closePanel} style={{ background: "none", border: "none", color: "#333c5a", cursor: "pointer", fontSize: 24, padding: "0 5px" }}>✕</button>
               </div>
 
               <div style={{ background: "#141825", padding: "10px 12px", borderRadius: 4, marginBottom: 16, fontSize: 11, color: "#8a94b5", border: "1px dashed #2a3045", fontFamily: "'Sarabun',sans-serif", lineHeight: 1.6 }}>
@@ -469,16 +524,16 @@ export default function App() {
           {selPile && form ? (
             <div style={{ padding: 16, borderTop: "1px solid #111420", display: "flex", gap: 10, background: "#060810" }}>
               <button onClick={savePile} style={{ flex: 1, padding: "12px", borderRadius: 4, border: "1px solid #16703a", background: "#0b2117", color: "#22c55e", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 15 }}>บันทึก ☁️</button>
-              <button onClick={() => { setSelPile(null); setForm(null); setSearchQ(""); }} style={{ padding: "12px 16px", borderRadius: 4, border: "1px solid #1e2235", background: "#0d0f18", color: "#555d7a", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 14 }}>ยกเลิก</button>
+              <button onClick={closePanel} style={{ padding: "12px 16px", borderRadius: 4, border: "1px solid #1e2235", background: "#0d0f18", color: "#555d7a", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 14 }}>ยกเลิก</button>
             </div>
-          ) : !selCell ? (
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", color: "#151825", textAlign: "center", padding: 20 }}>
+          ) : !selCell && (
+            <div className="desktop-placeholder" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", color: "#151825", textAlign: "center", padding: 20 }}>
               <div style={{ fontSize: 32, marginBottom: 12, opacity: .4 }}>👇</div>
               <div style={{ fontSize: 14, fontFamily: "'Sarabun',sans-serif", lineHeight: 1.9 }}>
                 พิมพ์เบอร์เสาเข็มในช่องค้นหา<br />หรือคลิกบน Grid เพื่ออัปเดต
               </div>
             </div>
-          ) : null}
+          )}
         </div>
       </div>
     </div>
