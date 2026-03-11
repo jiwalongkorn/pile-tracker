@@ -1,3 +1,8 @@
+/* ล้างค่าเก่าและบังคับให้เว็บกางเต็มจอ */
+:root {
+  max-width: none !important;
+}
+
 html,
 body,
 #root {
@@ -5,4 +10,5 @@ body,
   padding: 0;
   width: 100%;
   height: 100vh;
+  background: #080a10;
 }

@@ -3,7 +3,7 @@ import { doc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 
 // ============================================================
-// ข้อมูล GRID คงเดิม (ถูกต้องตามแบบ RFA-004 แล้ว)
+// ข้อมูล GRID คงเดิม
 // ============================================================
 const ROWS_META = [
   { id: "A", type: "edge", dir: "LR" }, { id: "A'", type: "inter", dir: "RL" },
@@ -68,15 +68,12 @@ function initPiles() {
   return m;
 }
 
-// ฟังก์ชันสำหรับหาระบุพิกัด Cell จากเบอร์เสาเข็ม
 function findCellByPileId(targetId) {
   const numId = parseInt(targetId);
   for (const rowId of Object.keys(GRID_DATA)) {
     const row = GRID_DATA[rowId];
     for (let colIdx = 0; colIdx < row.length; colIdx++) {
-      if (row[colIdx].includes(numId)) {
-        return { rowId, colIdx, pileIds: row[colIdx] };
-      }
+      if (row[colIdx].includes(numId)) return { rowId, colIdx, pileIds: row[colIdx] };
     }
   }
   return null;
@@ -90,7 +87,7 @@ export default function App() {
   const [filter, setFilter] = useState("all");
   const [zoom, setZoom] = useState(1.0);
   const [loading, setLoading] = useState(true);
-  const [searchQ, setSearchQ] = useState(""); // State สำหรับระบบค้นหา
+  const [searchQ, setSearchQ] = useState("");
 
   const docRef = doc(db, "projects", "pile-st04");
 
@@ -124,30 +121,21 @@ export default function App() {
     const val = e.target.value;
     setSearchQ(val);
     if (!val) {
-      setSelCell(null);
-      setSelPile(null);
-      return;
+      setSelCell(null); setSelPile(null); return;
     }
     const foundCell = findCellByPileId(val);
     if (foundCell) {
-      setSelCell(foundCell);
-      openPile(val);
+      setSelCell(foundCell); openPile(val);
     }
   };
 
   const savePile = async () => {
     if (!selPile) return;
-    const updatedPile = {
-      ...piles[selPile],
-      ...form,
-      date: form.date || new Date().toISOString().slice(0, 10)
-    };
-
+    const updatedPile = { ...piles[selPile], ...form, date: form.date || new Date().toISOString().slice(0, 10) };
     try {
       await updateDoc(docRef, { [selPile]: updatedPile });
       setSelPile(null); setForm(null); setSearchQ("");
     } catch (error) {
-      console.error("Error saving pile:", error);
       alert("ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่");
     }
   };
@@ -158,9 +146,7 @@ export default function App() {
     ids.forEach(id => { updates[id] = { ...piles[id], s: status, date }; });
     try {
       await updateDoc(docRef, updates);
-    } catch (error) {
-      console.error("Error updating cell:", error);
-    }
+    } catch (error) { }
   };
 
   const isMainCol = (ci) => ci % 2 === 0;
@@ -199,24 +185,21 @@ export default function App() {
     );
   };
 
+  // ✅ พระเอกของงาน: ฟังก์ชันวาดเส้น Grid แบบแปลน CAD
   const Cell = ({ rowId, colIdx, pileIds, rowType }) => {
     const isF2 = pileIds.length === 2;
     const horiz = f2IsHorizontal(colIdx, rowType);
-    const done = pileIds.filter(id => piles[id]?.s === ST.D).length;
-    const issue = pileIds.filter(id => piles[id]?.s === ST.X).length;
-    const allDone = done === pileIds.length;
-    const hasIssue = issue > 0;
+    const isMainRow = rowType !== "inter";
+    const isMainColumn = colIdx % 2 === 0;
     const isSel = selCell?.rowId === rowId && selCell?.colIdx === colIdx;
 
+    // ขยาย Spacing ให้โปร่งขึ้น
     const dotSz = Math.round(8 * zoom);
     const gap = Math.round(3 * zoom);
-    const pad = Math.round(3 * zoom);
-    const cellW = isF2
-      ? (horiz ? dotSz * 2 + gap + pad * 2 : dotSz + pad * 2)
-      : dotSz + pad * 2;
-    const cellH = isF2
-      ? (horiz ? dotSz + pad * 2 : dotSz * 2 + gap + pad * 2)
-      : dotSz + pad * 2;
+    const pad = Math.round(14 * zoom);
+
+    const cellW = isF2 ? (horiz ? dotSz * 2 + gap + pad * 2 : dotSz + pad * 2) : dotSz + pad * 2;
+    const cellH = isF2 ? (horiz ? dotSz + pad * 2 : dotSz * 2 + gap + pad * 2) : dotSz + pad * 2;
 
     return (
       <div
@@ -225,18 +208,23 @@ export default function App() {
         style={{
           width: cellW, height: cellH, flexShrink: 0,
           display: "flex",
-          flexDirection: isF2 && !horiz ? "column" : "row",
-          gap: isF2 ? gap : 0,
           alignItems: "center", justifyContent: "center",
-          background: isSel ? "#1a1f38" : allDone ? "#0b2117" : hasIssue ? "#210b0b" : "#0f1118",
-          border: `1px solid ${isSel ? "#fbbf24" : allDone ? "#1a7a3c" : hasIssue ? "#7a1c1c" : "#181c2a"}`,
-          borderRadius: 3, cursor: "pointer",
-          boxShadow: isSel ? "0 0 0 1px #fbbf2460" : "none",
-          padding: pad, position: "relative",
-          transition: "background .1s, border .1s",
+          position: "relative", cursor: "pointer",
+          background: isSel ? "rgba(251, 191, 36, 0.08)" : "transparent",
         }}
       >
-        {pileIds.map(id => <Dot key={id} id={id} />)}
+        {/* เส้นแกนแนวนอน (Horizontal Grid Line) */}
+        <div style={{ position: "absolute", left: 0, right: 0, top: "50%", height: 0, borderTop: isMainRow ? "1px solid #2a3045" : "1px dashed #141825", zIndex: 0 }} />
+        {/* เส้นแกนแนวตั้ง (Vertical Grid Line) */}
+        <div style={{ position: "absolute", top: 0, bottom: 0, left: "50%", width: 0, borderLeft: isMainColumn ? "1px solid #2a3045" : "1px dashed #141825", zIndex: 0 }} />
+
+        {/* จุดเสาเข็ม (วางทับบนจุดตัดแกน) */}
+        <div style={{
+          display: "flex", flexDirection: isF2 && !horiz ? "column" : "row", gap: isF2 ? gap : 0,
+          background: "#080a10", padding: 2, borderRadius: 10, zIndex: 1
+        }}>
+          {pileIds.map(id => <Dot key={id} id={id} />)}
+        </div>
       </div>
     );
   };
@@ -275,7 +263,7 @@ export default function App() {
       <div style={{ background: "#060810", borderBottom: "1px solid #111420", padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
         <div style={{ width: 28, height: 28, background: "linear-gradient(135deg,#0b2117,#16703a)", borderRadius: 4, display: "grid", placeItems: "center", fontSize: 13 }}>⬛</div>
         <div>
-          <div style={{ fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 14 }}>ติดตามการกดเสาเข็ม (Cloud Sync ☁️)</div>
+          <div style={{ fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 14 }}>ติดตามการกดเสาเข็ม (Blueprint Mode)</div>
           <div style={{ fontSize: 8, color: "#1e2235", letterSpacing: 3 }}>GRID A–M × 1–21 · F1/F2 · 1,111 PILES</div>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
@@ -301,21 +289,14 @@ export default function App() {
               <div style={{ fontSize: 16, fontWeight: 600, color: c }}>{v.toLocaleString()}</div>
             </div>
           ))}
-
-          {/* ช่องค้นหาเบอร์เสาเข็ม */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 10, background: "#0d0f18", padding: "5px 10px", borderRadius: 3, border: "1px solid #1e2235" }}>
             <span style={{ fontSize: 11, color: "#555d7a", fontFamily: "'Sarabun',sans-serif" }}>🔍 ค้นหาเบอร์:</span>
             <input
-              className="inp"
-              type="number"
-              placeholder="เช่น 102"
-              value={searchQ}
-              onChange={handleSearch}
+              className="inp" type="number" placeholder="เช่น 102" value={searchQ} onChange={handleSearch}
               style={{ width: 80, padding: "2px 6px", fontSize: 14, background: "transparent", border: "none", borderBottom: "1px solid #333c5a", borderRadius: 0 }}
             />
           </div>
         </div>
-
         <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ display: "flex", gap: 4 }}>
             {["all", "p", "d", "x"].map(s => (
@@ -336,24 +317,19 @@ export default function App() {
 
         {/* GRID */}
         <div style={{ flex: 1, overflow: "auto", padding: "12px 14px" }}>
-          <div style={{ display: "inline-block", minWidth: "max-content" }}>
+          <div style={{ display: "inline-block", minWidth: "max-content", padding: "20px" }}>
             {(() => {
               const dotSz = Math.round(8 * zoom);
               const gap3 = Math.round(3 * zoom);
-              const pad = Math.round(3 * zoom);
+              const pad = Math.round(14 * zoom);
 
               const cellW = (ci, rowType) => {
-                const isMain = ci % 2 === 0;
                 const horiz = f2IsHorizontal(ci, rowType);
-                if (!isMain) return dotSz + pad * 2;
-                if (horiz) return dotSz * 2 + gap3 + pad * 2;
-                return dotSz + pad * 2;
+                return horiz ? (dotSz * 2 + gap3 + pad * 2) : (dotSz + pad * 2);
               };
 
               const LABEL_W = 30;
-              const ROW_GAP = Math.round(4 * zoom);
-              const INTER_ROW_GAP = Math.round(2 * zoom);
-              const colSlotW = Array.from({ length: 41 }, (_, ci) => cellW(ci, "edge") + 4);
+              const colSlotW = Array.from({ length: 41 }, (_, ci) => cellW(ci, "edge"));
 
               return (
                 <div style={{ position: "relative" }}>
@@ -366,8 +342,6 @@ export default function App() {
                           fontSize: Math.max(7, Math.round(8 * zoom)),
                           color: isMain ? "#4a5580" : "#1e2338",
                           fontWeight: isMain ? 700 : 400,
-                          paddingBottom: 2,
-                          borderBottom: isMain ? "1px solid #252c45" : "none",
                         }}>
                           {isMain ? lbl : ""}
                         </div>
@@ -376,44 +350,23 @@ export default function App() {
                   </div>
 
                   {ROWS_META.map((meta, ri) => {
-                    const isInter = meta.type === "inter";
-                    const isEdge = meta.type === "edge";
-                    const rowBg = isInter ? "transparent" : isEdge ? "#0e1020" : "#0c0e1a";
-
                     return (
-                      <div key={meta.id} style={{
-                        display: "flex", alignItems: "center",
-                        marginBottom: isInter ? INTER_ROW_GAP : ROW_GAP,
-                        background: rowBg,
-                        borderTop: !isInter ? `1px solid ${isEdge ? "#2a3060" : "#1a1f38"}` : "none",
-                        borderBottom: !isInter ? `1px solid ${isEdge ? "#2a3060" : "#1a1f38"}` : "none",
-                        borderRadius: 2,
-                      }}>
+                      <div key={meta.id} style={{ display: "flex", alignItems: "center" }}>
                         <div style={{
                           width: LABEL_W, flexShrink: 0,
                           fontSize: Math.max(8, Math.round(9 * zoom)),
-                          fontWeight: isInter ? 400 : 700,
-                          color: isInter ? "#1e2338" : isEdge ? "#5a6090" : "#3a4270",
+                          fontWeight: meta.type !== "inter" ? 700 : 400,
+                          color: meta.type !== "inter" ? "#5a6090" : "#1e2338",
                           textAlign: "right", paddingRight: 5,
                           fontFamily: "'IBM Plex Mono'",
                         }}>
                           {meta.id}
                         </div>
-
-                        {GRID_DATA[meta.id].map((pileIds, ci) => {
-                          const isMainC = ci % 2 === 0;
-                          return (
-                            <div key={ci} style={{
-                              width: colSlotW[ci], flexShrink: 0,
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              borderLeft: isMainC && ci > 0 ? `1px solid #1a1f38` : "none",
-                              paddingTop: Math.round(2 * zoom),
-                              paddingBottom: Math.round(2 * zoom),
-                            }}>
-                              <Cell rowId={meta.id} colIdx={ci} pileIds={pileIds} rowType={meta.type} />
-                            </div>
-                          );
-                        })}
+                        {GRID_DATA[meta.id].map((pileIds, ci) => (
+                          <div key={ci} style={{ width: colSlotW[ci], flexShrink: 0, display: "flex", justifyContent: "center" }}>
+                            <Cell rowId={meta.id} colIdx={ci} pileIds={pileIds} rowType={meta.type} />
+                          </div>
+                        ))}
                       </div>
                     );
                   })}
@@ -425,7 +378,6 @@ export default function App() {
 
         {/* SIDE PANEL */}
         <div style={{ width: 255, borderLeft: "1px solid #111420", background: "#060810", display: "flex", flexDirection: "column", flexShrink: 0 }}>
-          {/* Cell panel */}
           {selCell && !selPile && (
             <div style={{ padding: 12, borderBottom: "1px solid #111420", animation: "slideIn .15s ease" }}>
               <div style={{ fontSize: 8, color: "#1e2235", letterSpacing: 2, marginBottom: 3 }}>FOOTING SELECTED</div>
@@ -455,7 +407,6 @@ export default function App() {
             </div>
           )}
 
-          {/* Pile edit form */}
           {selPile && form && (
             <div style={{ padding: 12, flex: 1, overflow: "auto", animation: "slideIn .15s ease" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
@@ -466,7 +417,6 @@ export default function App() {
                 <button onClick={() => { setSelPile(null); setForm(null); setSearchQ(""); }} style={{ background: "none", border: "none", color: "#333c5a", cursor: "pointer", fontSize: 16 }}>✕</button>
               </div>
 
-              {/* แสดงสเปกจากหน้าแบบ ST-04 */}
               <div style={{ background: "#141825", padding: "8px 10px", borderRadius: 3, marginBottom: 12, fontSize: 9, color: "#8a94b5", border: "1px dashed #2a3045", fontFamily: "'Sarabun',sans-serif", lineHeight: 1.6 }}>
                 <div style={{ color: "#cdd1e0", fontWeight: 'bold', marginBottom: 2 }}>📝 สเปกอ้างอิง (แบบ ST-04)</div>
                 <div>• ขนาด: PC PILE S-40 22 m.Depth</div>
@@ -515,7 +465,6 @@ export default function App() {
             </div>
           )}
 
-          {/* Save bar */}
           {selPile && form ? (
             <div style={{ padding: 12, borderTop: "1px solid #111420", display: "flex", gap: 7 }}>
               <button onClick={savePile} style={{ flex: 1, padding: "8px", borderRadius: 3, border: "1px solid #16703a", background: "#0b2117", color: "#22c55e", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 13 }}>บันทึก ☁️</button>
