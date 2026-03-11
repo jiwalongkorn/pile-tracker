@@ -162,7 +162,8 @@ export default function App() {
     const dim = filter !== "all" && p.s !== filter;
     const isSel = selPile === id;
     const isSearched = searchQ && String(id) === searchQ;
-    const sz = Math.round(8 * zoom);
+    // ✅ อัปเกรด 1: เพิ่มขนาดจุด (Base size จาก 8 เป็น 12)
+    const sz = Math.round(12 * zoom);
 
     return (
       <div
@@ -185,7 +186,6 @@ export default function App() {
     );
   };
 
-  // ✅ พระเอกของงาน: ฟังก์ชันวาดเส้น Grid แบบแปลน CAD
   const Cell = ({ rowId, colIdx, pileIds, rowType }) => {
     const isF2 = pileIds.length === 2;
     const horiz = f2IsHorizontal(colIdx, rowType);
@@ -193,10 +193,10 @@ export default function App() {
     const isMainColumn = colIdx % 2 === 0;
     const isSel = selCell?.rowId === rowId && selCell?.colIdx === colIdx;
 
-    // ขยาย Spacing ให้โปร่งขึ้น
-    const dotSz = Math.round(8 * zoom);
-    const gap = Math.round(3 * zoom);
-    const pad = Math.round(14 * zoom);
+    // ปรับสัดส่วน Cell ให้สัมพันธ์กับจุดที่ใหญ่ขึ้น
+    const dotSz = Math.round(12 * zoom);
+    const gap = Math.round(4 * zoom);
+    const pad = Math.round(12 * zoom);
 
     const cellW = isF2 ? (horiz ? dotSz * 2 + gap + pad * 2 : dotSz + pad * 2) : dotSz + pad * 2;
     const cellH = isF2 ? (horiz ? dotSz + pad * 2 : dotSz * 2 + gap + pad * 2) : dotSz + pad * 2;
@@ -213,15 +213,12 @@ export default function App() {
           background: isSel ? "rgba(251, 191, 36, 0.08)" : "transparent",
         }}
       >
-        {/* เส้นแกนแนวนอน (Horizontal Grid Line) */}
         <div style={{ position: "absolute", left: 0, right: 0, top: "50%", height: 0, borderTop: isMainRow ? "1px solid #2a3045" : "1px dashed #141825", zIndex: 0 }} />
-        {/* เส้นแกนแนวตั้ง (Vertical Grid Line) */}
         <div style={{ position: "absolute", top: 0, bottom: 0, left: "50%", width: 0, borderLeft: isMainColumn ? "1px solid #2a3045" : "1px dashed #141825", zIndex: 0 }} />
 
-        {/* จุดเสาเข็ม (วางทับบนจุดตัดแกน) */}
         <div style={{
           display: "flex", flexDirection: isF2 && !horiz ? "column" : "row", gap: isF2 ? gap : 0,
-          background: "#080a10", padding: 2, borderRadius: 10, zIndex: 1
+          background: "#080a10", padding: 3, borderRadius: 10, zIndex: 1
         }}>
           {pileIds.map(id => <Dot key={id} id={id} />)}
         </div>
@@ -242,104 +239,106 @@ export default function App() {
   }
 
   return (
-    <div style={{ fontFamily: "'IBM Plex Mono', monospace", minHeight: "100vh", background: "#080a10", color: "#cdd1e0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div style={{ fontFamily: "'IBM Plex Mono', monospace", height: "100vh", background: "#080a10", color: "#cdd1e0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {/* ✅ อัปเกรด 2: CSS สำหรับระบบ Responsive บนมือถือ */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sarabun:wght@400;600;700&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
         ::-webkit-scrollbar{width:5px;height:5px}
         ::-webkit-scrollbar-track{background:#0d0f18}
         ::-webkit-scrollbar-thumb{background:#1e2235;border-radius:3px}
-        .pill{padding:4px 10px;border-radius:3px;border:1px solid #1e2235;background:transparent;color:#555d7a;cursor:pointer;font-size:11px;font-family:'IBM Plex Mono',monospace;transition:all .15s}
+        .pill{padding:6px 12px;border-radius:3px;border:1px solid #1e2235;background:transparent;color:#555d7a;cursor:pointer;font-size:12px;font-family:'IBM Plex Mono',monospace;transition:all .15s}
         .pill.on{background:#141825;color:#cdd1e0;border-color:#333c5a}
         .pill:hover{color:#cdd1e0}
-        .inp{background:#080a10;border:1px solid #1e2235;border-radius:3px;color:#cdd1e0;padding:6px 9px;font-family:'IBM Plex Mono',monospace;font-size:12px;width:100%;outline:none}
+        .inp{background:#080a10;border:1px solid #1e2235;border-radius:3px;color:#cdd1e0;padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:16px;width:100%;outline:none}
         .inp:focus{border-color:#16703a}
-        @keyframes slideIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:translateX(0)}}
+        
+        /* Layout หลัก */
+        .main-content { flex: 1; display: flex; flex-direction: row; overflow: hidden; }
+        .side-panel { width: 300px; border-left: 1px solid #111420; background: #060810; display: flex; flex-direction: column; flex-shrink: 0; }
+        .controls-bar { border-bottom: 1px solid #111420; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; flex-wrap: wrap; justify-content: space-between; }
+        
+        /* มือถือ (จอเล็กกว่า 768px) */
+        @media (max-width: 768px) {
+          .main-content { flex-direction: column; }
+          .side-panel { width: 100%; border-left: none; border-top: 1px solid #111420; height: 45vh; z-index: 100; box-shadow: 0 -5px 15px rgba(0,0,0,0.5); }
+          .controls-bar { flex-direction: column; align-items: stretch; gap: 12px; }
+          .stat-box { flex: 1; text-align: center; }
+          .search-box { width: 100%; margin-left: 0 !important; margin-top: 8px; justify-content: space-between; }
+        }
+
+        @keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
         @keyframes glowPulse{from{box-shadow:0 0 5px 2px #fbbf24;}to{box-shadow:0 0 15px 5px #fbbf24;}}
       `}</style>
 
       {/* HEADER */}
-      <div style={{ background: "#060810", borderBottom: "1px solid #111420", padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+      <div style={{ background: "#060810", borderBottom: "1px solid #111420", padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
         <div style={{ width: 28, height: 28, background: "linear-gradient(135deg,#0b2117,#16703a)", borderRadius: 4, display: "grid", placeItems: "center", fontSize: 13 }}>⬛</div>
         <div>
-          <div style={{ fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 14 }}>ติดตามการกดเสาเข็ม (Blueprint Mode)</div>
-          <div style={{ fontSize: 8, color: "#1e2235", letterSpacing: 3 }}>GRID A–M × 1–21 · F1/F2 · 1,111 PILES</div>
+          <div style={{ fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 16 }}>ติดตามการกดเสาเข็ม (Blueprint)</div>
+          <div style={{ fontSize: 9, color: "#1e2235", letterSpacing: 3 }}>GRID A–M × 1–21 · F1/F2 · 1,111 PILES</div>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-            <div style={{ width: 100, height: 3, background: "#111420", borderRadius: 2, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${stats.pct}%`, background: "linear-gradient(90deg,#0b2117,#22c55e)", borderRadius: 2, transition: "width .5s" }} />
-            </div>
-            <span style={{ fontSize: 12, color: "#22c55e", fontWeight: 600 }}>{stats.pct}%</span>
+            <span style={{ fontSize: 14, color: "#22c55e", fontWeight: 600 }}>{stats.pct}%</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#22c55e", animation: "pulse 2s infinite" }} />
-            <span style={{ fontSize: 8, color: "#1e2235" }}>LIVE</span>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", animation: "pulse 2s infinite" }} />
+            <span style={{ fontSize: 9, color: "#1e2235" }}>LIVE</span>
           </div>
         </div>
       </div>
 
       {/* CONTROLS & SEARCH */}
-      <div style={{ borderBottom: "1px solid #111420", padding: "7px 16px", display: "flex", alignItems: "center", gap: 8, flexShrink: 0, flexWrap: "wrap", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div className="controls-bar">
+        <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", flexWrap: "wrap" }}>
           {[{ l: "ทั้งหมด", v: TOTAL, c: "#cdd1e0" }, { l: "กดแล้ว", v: stats.done, c: "#22c55e" }, { l: "ยังไม่กด", v: stats.pending, c: "#333c5a" }, { l: "มีปัญหา", v: stats.issue, c: "#ef4444" }].map(({ l, v, c }) => (
-            <div key={l} style={{ background: "#0d0f18", border: "1px solid #111420", borderRadius: 3, padding: "5px 12px", marginRight: 3 }}>
-              <div style={{ fontSize: 7, color: "#252c42", fontFamily: "'Sarabun',sans-serif" }}>{l}</div>
-              <div style={{ fontSize: 16, fontWeight: 600, color: c }}>{v.toLocaleString()}</div>
+            <div key={l} className="stat-box" style={{ background: "#0d0f18", border: "1px solid #111420", borderRadius: 4, padding: "6px 14px", flexGrow: 1 }}>
+              <div style={{ fontSize: 9, color: "#252c42", fontFamily: "'Sarabun',sans-serif" }}>{l}</div>
+              <div style={{ fontSize: 18, fontWeight: 600, color: c }}>{v.toLocaleString()}</div>
             </div>
           ))}
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 10, background: "#0d0f18", padding: "5px 10px", borderRadius: 3, border: "1px solid #1e2235" }}>
-            <span style={{ fontSize: 11, color: "#555d7a", fontFamily: "'Sarabun',sans-serif" }}>🔍 ค้นหาเบอร์:</span>
+          <div className="search-box" style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto", background: "#0d0f18", padding: "8px 12px", borderRadius: 4, border: "1px solid #1e2235" }}>
+            <span style={{ fontSize: 13, color: "#555d7a", fontFamily: "'Sarabun',sans-serif" }}>🔍 ค้นหาเบอร์:</span>
             <input
               className="inp" type="number" placeholder="เช่น 102" value={searchQ} onChange={handleSearch}
-              style={{ width: 80, padding: "2px 6px", fontSize: 14, background: "transparent", border: "none", borderBottom: "1px solid #333c5a", borderRadius: 0 }}
+              style={{ width: 90, padding: "2px 6px", background: "transparent", border: "none", borderBottom: "1px solid #333c5a", borderRadius: 0 }}
             />
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ display: "flex", gap: 4 }}>
-            {["all", "p", "d", "x"].map(s => (
-              <button key={s} className={`pill ${filter === s ? "on" : ""}`} onClick={() => setFilter(s)}>
-                {s === "all" ? "ทั้งหมด" : ST_TH[s]}
-              </button>
-            ))}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "#333c5a", marginLeft: 8 }}>
-            <span>ขนาด</span>
-            <input type="range" min="0.6" max="2.0" step="0.1" value={zoom} onChange={e => setZoom(+e.target.value)} style={{ width: 60, accentColor: "#16703a" }} />
           </div>
         </div>
       </div>
 
       {/* BODY */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+      <div className="main-content">
 
         {/* GRID */}
-        <div style={{ flex: 1, overflow: "auto", padding: "12px 14px" }}>
-          <div style={{ display: "inline-block", minWidth: "max-content", padding: "20px" }}>
+        <div style={{ flex: 1, overflow: "auto", padding: "16px 20px" }}>
+          <div style={{ display: "inline-block", minWidth: "max-content", paddingRight: "40px", paddingBottom: "40px" }}>
             {(() => {
-              const dotSz = Math.round(8 * zoom);
-              const gap3 = Math.round(3 * zoom);
-              const pad = Math.round(14 * zoom);
+              const dotSz = Math.round(12 * zoom);
+              const gap3 = Math.round(4 * zoom);
+              const pad = Math.round(12 * zoom);
 
               const cellW = (ci, rowType) => {
                 const horiz = f2IsHorizontal(ci, rowType);
                 return horiz ? (dotSz * 2 + gap3 + pad * 2) : (dotSz + pad * 2);
               };
 
-              const LABEL_W = 30;
+              // ขยายช่องว่างสำหรับป้ายชื่อ
+              const LABEL_W = 40;
               const colSlotW = Array.from({ length: 41 }, (_, ci) => cellW(ci, "edge"));
 
               return (
                 <div style={{ position: "relative" }}>
-                  <div style={{ display: "flex", marginLeft: LABEL_W, marginBottom: 6 }}>
+                  <div style={{ display: "flex", marginLeft: LABEL_W, marginBottom: 8 }}>
                     {COL_LABELS.map((lbl, ci) => {
                       const isMain = ci % 2 === 0;
                       return (
                         <div key={ci} style={{
                           width: colSlotW[ci], flexShrink: 0, textAlign: "center",
-                          fontSize: Math.max(7, Math.round(8 * zoom)),
+                          // ✅ อัปเกรด 1.2: เพิ่มขนาดตัวอักษร Grid คอลัมน์ (1, 2, 3)
+                          fontSize: Math.max(10, Math.round(11 * zoom)),
                           color: isMain ? "#4a5580" : "#1e2338",
                           fontWeight: isMain ? 700 : 400,
                         }}>
@@ -354,10 +353,11 @@ export default function App() {
                       <div key={meta.id} style={{ display: "flex", alignItems: "center" }}>
                         <div style={{
                           width: LABEL_W, flexShrink: 0,
-                          fontSize: Math.max(8, Math.round(9 * zoom)),
+                          // ✅ อัปเกรด 1.3: เพิ่มขนาดตัวอักษร Grid แถว (A, B, C)
+                          fontSize: Math.max(11, Math.round(13 * zoom)),
                           fontWeight: meta.type !== "inter" ? 700 : 400,
                           color: meta.type !== "inter" ? "#5a6090" : "#1e2338",
-                          textAlign: "right", paddingRight: 5,
+                          textAlign: "right", paddingRight: 8,
                           fontFamily: "'IBM Plex Mono'",
                         }}>
                           {meta.id}
@@ -376,86 +376,86 @@ export default function App() {
           </div>
         </div>
 
-        {/* SIDE PANEL */}
-        <div style={{ width: 255, borderLeft: "1px solid #111420", background: "#060810", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+        {/* SIDE PANEL (แผงควบคุมด้านข้าง / หรือด้านล่างในมือถือ) */}
+        <div className="side-panel">
           {selCell && !selPile && (
-            <div style={{ padding: 12, borderBottom: "1px solid #111420", animation: "slideIn .15s ease" }}>
-              <div style={{ fontSize: 8, color: "#1e2235", letterSpacing: 2, marginBottom: 3 }}>FOOTING SELECTED</div>
-              <div style={{ fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 14, color: "#fbbf24", marginBottom: 6 }}>
+            <div style={{ padding: 16, borderBottom: "1px solid #111420", animation: "slideIn .15s ease" }}>
+              <div style={{ fontSize: 10, color: "#1e2235", letterSpacing: 2, marginBottom: 5 }}>FOOTING SELECTED</div>
+              <div style={{ fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 18, color: "#fbbf24", marginBottom: 8 }}>
                 แถว {selCell.rowId} · Col {COL_LABELS[selCell.colIdx]}
-                <span style={{ marginLeft: 8, fontSize: 10, color: selCell.pileIds.length === 2 ? "#60a5fa" : "#a78bfa", fontWeight: 400 }}>
+                <span style={{ marginLeft: 8, fontSize: 12, color: selCell.pileIds.length === 2 ? "#60a5fa" : "#a78bfa", fontWeight: 400 }}>
                   F{selCell.pileIds.length} {selCell.pileIds.length === 2 ? (f2IsHorizontal(selCell.colIdx, ROWS_META.find(r => r.id === selCell.rowId).type) ? "C1" : "C2") : ""}
                 </span>
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 10 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
                 {selCell.pileIds.map(id => {
                   const p = piles[id];
                   return (
-                    <div key={id} onClick={() => openPile(id)} style={{ display: "flex", alignItems: "center", gap: 4, background: ST_BG[p.s], border: `1px solid ${ST_BD[p.s]}`, borderRadius: 3, padding: "3px 8px", cursor: "pointer", fontSize: 10, color: "#cdd1e0" }}>
-                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: ST_DOT[p.s] }} />
+                    <div key={id} onClick={() => openPile(id)} style={{ display: "flex", alignItems: "center", gap: 6, background: ST_BG[p.s], border: `1px solid ${ST_BD[p.s]}`, borderRadius: 4, padding: "6px 10px", cursor: "pointer", fontSize: 13, color: "#cdd1e0" }}>
+                      <div style={{ width: 10, height: 10, borderRadius: "50%", background: ST_DOT[p.s] }} />
                       #{id}
                     </div>
                   );
                 })}
               </div>
-              <div style={{ fontSize: 9, color: "#333c5a", marginBottom: 5, fontFamily: "'Sarabun',sans-serif" }}>อัปเดตทั้ง footing</div>
-              <div style={{ display: "flex", gap: 4 }}>
-                <button onClick={() => markCell(selCell.pileIds, ST.D)} style={{ flex: 1, padding: "5px 3px", fontSize: 10, borderRadius: 3, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", background: "#0b2117", border: "1px solid #16703a", color: "#22c55e" }}>✓ กดแล้ว</button>
-                <button onClick={() => markCell(selCell.pileIds, ST.X)} style={{ flex: 1, padding: "5px 3px", fontSize: 10, borderRadius: 3, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", background: "#210b0b", border: "1px solid #8c1c1c", color: "#ef4444" }}>! ปัญหา</button>
-                <button onClick={() => markCell(selCell.pileIds, ST.P)} style={{ flex: 1, padding: "5px 3px", fontSize: 10, borderRadius: 3, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", background: "#141620", border: "1px solid #272c42", color: "#555d7a" }}>↺ รีเซ็ต</button>
+              <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>อัปเดตทั้ง footing อย่างรวดเร็ว</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => markCell(selCell.pileIds, ST.D)} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", background: "#0b2117", border: "1px solid #16703a", color: "#22c55e" }}>✓ กดแล้ว</button>
+                <button onClick={() => markCell(selCell.pileIds, ST.X)} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", background: "#210b0b", border: "1px solid #8c1c1c", color: "#ef4444" }}>! ปัญหา</button>
+                <button onClick={() => markCell(selCell.pileIds, ST.P)} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", background: "#141620", border: "1px solid #272c42", color: "#555d7a" }}>↺ รีเซ็ต</button>
               </div>
             </div>
           )}
 
           {selPile && form && (
-            <div style={{ padding: 12, flex: 1, overflow: "auto", animation: "slideIn .15s ease" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+            <div style={{ padding: 16, flex: 1, overflow: "auto", animation: "slideIn .15s ease" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                 <div>
-                  <div style={{ fontSize: 8, color: "#1e2235", letterSpacing: 2 }}>บันทึกข้อมูล</div>
-                  <div style={{ fontFamily: "'Sarabun',sans-serif", fontSize: 16, fontWeight: 700, color: "#fbbf24" }}>เสาเข็ม #{selPile}</div>
+                  <div style={{ fontSize: 10, color: "#1e2235", letterSpacing: 2 }}>บันทึกข้อมูล</div>
+                  <div style={{ fontFamily: "'Sarabun',sans-serif", fontSize: 20, fontWeight: 700, color: "#fbbf24" }}>เสาเข็ม #{selPile}</div>
                 </div>
-                <button onClick={() => { setSelPile(null); setForm(null); setSearchQ(""); }} style={{ background: "none", border: "none", color: "#333c5a", cursor: "pointer", fontSize: 16 }}>✕</button>
+                <button onClick={() => { setSelPile(null); setForm(null); setSearchQ(""); }} style={{ background: "none", border: "none", color: "#333c5a", cursor: "pointer", fontSize: 20, padding: 5 }}>✕</button>
               </div>
 
-              <div style={{ background: "#141825", padding: "8px 10px", borderRadius: 3, marginBottom: 12, fontSize: 9, color: "#8a94b5", border: "1px dashed #2a3045", fontFamily: "'Sarabun',sans-serif", lineHeight: 1.6 }}>
-                <div style={{ color: "#cdd1e0", fontWeight: 'bold', marginBottom: 2 }}>📝 สเปกอ้างอิง (แบบ ST-04)</div>
+              <div style={{ background: "#141825", padding: "10px 12px", borderRadius: 4, marginBottom: 16, fontSize: 11, color: "#8a94b5", border: "1px dashed #2a3045", fontFamily: "'Sarabun',sans-serif", lineHeight: 1.6 }}>
+                <div style={{ color: "#cdd1e0", fontWeight: 'bold', marginBottom: 4 }}>📝 สเปกอ้างอิง (แบบ ST-04)</div>
                 <div>• ขนาด: PC PILE S-40 22 m.Depth</div>
                 <div>• รับน้ำหนัก: Safe Load 40 Tons/Pile</div>
                 <div>• เหล็กโผล่: Dowel 4-DB16 L=2.50m</div>
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 <div>
-                  <div style={{ fontSize: 9, color: "#333c5a", marginBottom: 5, fontFamily: "'Sarabun',sans-serif" }}>สถานะ</div>
-                  <div style={{ display: "flex", gap: 4 }}>
+                  <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>สถานะ</div>
+                  <div style={{ display: "flex", gap: 6 }}>
                     {Object.entries(ST_TH).map(([k, v]) => (
-                      <button key={k} onClick={() => setForm(f => ({ ...f, s: k }))} style={{ flex: 1, padding: "5px 2px", fontSize: 10, borderRadius: 3, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: form.s === k ? 700 : 400, background: form.s === k ? ST_BG[k] : "transparent", border: `1px solid ${form.s === k ? ST_BD[k] : "#1e2235"}`, color: form.s === k ? "#cdd1e0" : "#333c5a" }}>
+                      <button key={k} onClick={() => setForm(f => ({ ...f, s: k }))} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: form.s === k ? 700 : 400, background: form.s === k ? ST_BG[k] : "transparent", border: `1px solid ${form.s === k ? ST_BD[k] : "#1e2235"}`, color: form.s === k ? "#cdd1e0" : "#333c5a" }}>
                         {v}
                       </button>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 9, color: "#333c5a", marginBottom: 4, fontFamily: "'Sarabun',sans-serif" }}>วันที่กด</div>
+                  <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>วันที่กด</div>
                   <input className="inp" type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <div>
-                    <div style={{ fontSize: 9, color: "#333c5a", marginBottom: 4, fontFamily: "'Sarabun',sans-serif" }}>ความลึก (ม.)</div>
+                    <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>ความลึก (ม.)</div>
                     <input className="inp" type="number" step="0.1" placeholder="22.00" value={form.depth} onChange={e => setForm(f => ({ ...f, depth: e.target.value }))} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 9, color: "#333c5a", marginBottom: 4, fontFamily: "'Sarabun',sans-serif" }}>ค่า Set (มม.)</div>
+                    <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>ค่า Set (มม.)</div>
                     <input className="inp" type="number" step="0.5" placeholder="5" value={form.set} onChange={e => setForm(f => ({ ...f, set: e.target.value }))} />
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 9, color: "#333c5a", marginBottom: 4, fontFamily: "'Sarabun',sans-serif" }}>หมายเหตุ</div>
-                  <textarea className="inp" rows={3} placeholder="บันทึกเพิ่มเติม..." value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} style={{ resize: "vertical" }} />
+                  <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>หมายเหตุ</div>
+                  <textarea className="inp" rows={3} placeholder="บันทึกปัญหา หรือข้อมูลเพิ่มเติม..." value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} style={{ resize: "vertical" }} />
                 </div>
                 {piles[selPile]?.date && (
-                  <div style={{ background: "#0d0f18", borderRadius: 3, padding: 9, fontSize: 10, color: "#333c5a", border: "1px solid #111420", lineHeight: 1.8 }}>
-                    <div style={{ color: "#16703a", fontFamily: "'Sarabun',sans-serif", fontSize: 11, marginBottom: 2 }}>บันทึกล่าสุด</div>
+                  <div style={{ background: "#0d0f18", borderRadius: 4, padding: 12, fontSize: 12, color: "#333c5a", border: "1px solid #111420", lineHeight: 1.8 }}>
+                    <div style={{ color: "#16703a", fontFamily: "'Sarabun',sans-serif", fontSize: 12, marginBottom: 4, fontWeight: "bold" }}>บันทึกล่าสุด ☁️</div>
                     <div>วันที่: {piles[selPile].date}</div>
                     {piles[selPile].depth && <div>ลึก: {piles[selPile].depth} ม.</div>}
                     {piles[selPile].set && <div>Set: {piles[selPile].set} มม.</div>}
@@ -465,15 +465,16 @@ export default function App() {
             </div>
           )}
 
+          {/* Save bar */}
           {selPile && form ? (
-            <div style={{ padding: 12, borderTop: "1px solid #111420", display: "flex", gap: 7 }}>
-              <button onClick={savePile} style={{ flex: 1, padding: "8px", borderRadius: 3, border: "1px solid #16703a", background: "#0b2117", color: "#22c55e", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 13 }}>บันทึก ☁️</button>
-              <button onClick={() => { setSelPile(null); setForm(null); setSearchQ(""); }} style={{ padding: "8px 12px", borderRadius: 3, border: "1px solid #1e2235", background: "#0d0f18", color: "#555d7a", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 12 }}>ยกเลิก</button>
+            <div style={{ padding: 16, borderTop: "1px solid #111420", display: "flex", gap: 10, background: "#060810" }}>
+              <button onClick={savePile} style={{ flex: 1, padding: "12px", borderRadius: 4, border: "1px solid #16703a", background: "#0b2117", color: "#22c55e", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 15 }}>บันทึก ☁️</button>
+              <button onClick={() => { setSelPile(null); setForm(null); setSearchQ(""); }} style={{ padding: "12px 16px", borderRadius: 4, border: "1px solid #1e2235", background: "#0d0f18", color: "#555d7a", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 14 }}>ยกเลิก</button>
             </div>
           ) : !selCell ? (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", color: "#151825", textAlign: "center", padding: 20 }}>
-              <div style={{ fontSize: 26, marginBottom: 10, opacity: .4 }}>☁️</div>
-              <div style={{ fontSize: 11, fontFamily: "'Sarabun',sans-serif", lineHeight: 1.9 }}>
+              <div style={{ fontSize: 32, marginBottom: 12, opacity: .4 }}>👇</div>
+              <div style={{ fontSize: 14, fontFamily: "'Sarabun',sans-serif", lineHeight: 1.9 }}>
                 พิมพ์เบอร์เสาเข็มในช่องค้นหา<br />หรือคลิกบน Grid เพื่ออัปเดต
               </div>
             </div>
