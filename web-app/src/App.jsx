@@ -3,7 +3,7 @@ import { doc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 
 // ============================================================
-// ข้อมูล GRID คงเดิม
+// ข้อมูล GRID คงเดิม (อ้างอิงตามแบบ ST-04 และ RFA-004)
 // ============================================================
 const ROWS_META = [
   { id: "A", type: "edge", dir: "LR" }, { id: "A'", type: "inter", dir: "RL" },
@@ -62,14 +62,14 @@ const ST_BG = { p: "#141620", d: "#0b2117", x: "#210b0b" };
 const ST_BD = { p: "#272c42", d: "#16703a", x: "#8c1c1c" };
 const ST_DOT = { p: "#303654", d: "#22c55e", x: "#ef4444" };
 
-// ✅ อัปเกรด 1: โครงสร้างข้อมูลใหม่ให้ตรงกับหน้างานจริง
+// ข้อมูลเริ่มต้นให้ตรงกับหน้างานจริง (เอาช่องระยะส่งออกแล้ว)
 function initPiles() {
   const m = {};
   for (let i = 1; i <= TOTAL; i++) {
     m[i] = {
       id: i, s: ST.P,
       date: "", startTime: "", endTime: "",
-      pileTip: "", pileTop: "", pressure: "", follower: "", note: ""
+      pileTip: "", pileTop: "", pressure: "", note: ""
     };
   }
   return m;
@@ -117,7 +117,6 @@ export default function App() {
     return { done, issue, pending: TOTAL - done - issue, pct: ((done / TOTAL) * 100).toFixed(1) };
   }, [piles]);
 
-  // ✅ ดึงข้อมูลเก่ามาใส่ฟอร์ม
   const openPile = (id) => {
     const p = piles[id];
     setSelPile(id);
@@ -130,7 +129,6 @@ export default function App() {
       pileTip: p.pileTip || "",
       pileTop: p.pileTop || "",
       pressure: p.pressure || "",
-      follower: p.follower || "",
       note: p.note || ""
     });
   };
@@ -173,8 +171,6 @@ export default function App() {
     } catch (error) { }
   };
 
-  const isMainCol = (ci) => ci % 2 === 0;
-  const isInterRow = (meta) => meta.type === "inter";
   const f2IsHorizontal = (ci, rowType) => {
     if (ci === 0 || ci === 40) return true;
     if ((ci === 16 || ci === 24) && rowType === "mid") return true;
@@ -278,9 +274,7 @@ export default function App() {
         
         .main-content { flex: 1; display: flex; flex-direction: row; overflow: hidden; position: relative; }
         .controls-bar { border-bottom: 1px solid #111420; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; flex-wrap: wrap; justify-content: space-between; }
-        
         .backdrop { display: none; }
-        
         .side-panel { width: 340px; border-left: 1px solid #111420; background: #060810; display: flex; flex-direction: column; flex-shrink: 0; z-index: 10; }
         .mobile-drag-handle { display: none; }
         
@@ -288,20 +282,9 @@ export default function App() {
           .controls-bar { flex-direction: column; align-items: stretch; gap: 12px; }
           .stat-box { flex: 1; text-align: center; }
           .search-box { width: 100%; margin-left: 0 !important; margin-top: 8px; justify-content: space-between; }
-          
-          .backdrop {
-            display: block; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.6); backdrop-filter: blur(2px); z-index: 998;
-            opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
-          }
+          .backdrop { display: block; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(2px); z-index: 998; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
           .backdrop.open { opacity: 1; pointer-events: auto; }
-
-          .side-panel {
-            position: absolute; bottom: 0; left: 0; right: 0; width: 100%;
-            height: auto; max-height: 85vh; border-left: none; border-top: 1px solid #2a3045;
-            border-radius: 20px 20px 0 0; box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
-            z-index: 999; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1);
-          }
+          .side-panel { position: absolute; bottom: 0; left: 0; right: 0; width: 100%; height: auto; max-height: 85vh; border-left: none; border-top: 1px solid #2a3045; border-radius: 20px 20px 0 0; box-shadow: 0 -10px 30px rgba(0,0,0,0.8); z-index: 999; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1); }
           .side-panel.open { transform: translateY(0); }
           .mobile-drag-handle { display: block; width: 40px; height: 5px; background: #333c5a; border-radius: 3px; margin: 12px auto 5px; }
         }
@@ -329,7 +312,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* CONTROLS & SEARCH */}
       <div className="controls-bar">
         <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", flexWrap: "wrap" }}>
           {[{ l: "ทั้งหมด", v: TOTAL, c: "#cdd1e0" }, { l: "กดแล้ว", v: stats.done, c: "#22c55e" }, { l: "ยังไม่กด", v: stats.pending, c: "#333c5a" }, { l: "มีปัญหา", v: stats.issue, c: "#ef4444" }].map(({ l, v, c }) => (
@@ -341,17 +323,14 @@ export default function App() {
           <div className="search-box" style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto", background: "#0d0f18", padding: "8px 12px", borderRadius: 4, border: "1px solid #1e2235" }}>
             <span style={{ fontSize: 13, color: "#555d7a", fontFamily: "'Sarabun',sans-serif" }}>🔍 ค้นหาเบอร์:</span>
             <input
-              className="inp" type="number" placeholder="เช่น 102" value={searchQ} onChange={handleSearch}
+              className="inp" type="number" placeholder="เช่น 1" value={searchQ} onChange={handleSearch}
               style={{ width: 90, padding: "2px 6px", background: "transparent", border: "none", borderBottom: "1px solid #333c5a", borderRadius: 0 }}
             />
           </div>
         </div>
       </div>
 
-      {/* BODY */}
       <div className="main-content">
-
-        {/* GRID Area */}
         <div style={{ flex: 1, overflow: "auto", padding: "16px 20px" }}>
           <div style={{ display: "inline-block", minWidth: "max-content", paddingRight: "40px", paddingBottom: "40px" }}>
             {(() => {
@@ -383,7 +362,7 @@ export default function App() {
                     })}
                   </div>
 
-                  {ROWS_META.map((meta, ri) => {
+                  {ROWS_META.map((meta) => {
                     return (
                       <div key={meta.id} style={{ display: "flex", alignItems: "center" }}>
                         <div style={{
@@ -412,7 +391,6 @@ export default function App() {
 
         <div className={`backdrop ${isPanelOpen ? 'open' : ''}`} onClick={closePanel}></div>
 
-        {/* SIDE PANEL */}
         <div className={`side-panel ${isPanelOpen ? 'open' : ''}`}>
           <div className="mobile-drag-handle" onClick={closePanel}></div>
 
@@ -421,9 +399,6 @@ export default function App() {
               <div style={{ fontSize: 10, color: "#1e2235", letterSpacing: 2, marginBottom: 5 }}>FOOTING SELECTED</div>
               <div style={{ fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 18, color: "#fbbf24", marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
                 <span>แถว {selCell.rowId} · Col {COL_LABELS[selCell.colIdx]}</span>
-                <span style={{ fontSize: 12, color: selCell.pileIds.length === 2 ? "#60a5fa" : "#a78bfa", fontWeight: 400, background: "#141825", padding: "2px 8px", borderRadius: 4 }}>
-                  F{selCell.pileIds.length} {selCell.pileIds.length === 2 ? (f2IsHorizontal(selCell.colIdx, ROWS_META.find(r => r.id === selCell.rowId).type) ? "C1" : "C2") : ""}
-                </span>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
                 {selCell.pileIds.map(id => {
@@ -436,7 +411,6 @@ export default function App() {
                   );
                 })}
               </div>
-              <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>อัปเดตทั้ง footing อย่างรวดเร็ว</div>
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={() => markCell(selCell.pileIds, ST.D)} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", background: "#0b2117", border: "1px solid #16703a", color: "#22c55e" }}>✓ กดแล้ว</button>
                 <button onClick={() => markCell(selCell.pileIds, ST.X)} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", background: "#210b0b", border: "1px solid #8c1c1c", color: "#ef4444" }}>! ปัญหา</button>
@@ -445,7 +419,6 @@ export default function App() {
             </div>
           )}
 
-          {/* ✅ อัปเกรด 2: ฟอร์มบันทึกข้อมูลหน้างานแบบจัดเต็ม */}
           {selPile && form && (
             <div style={{ padding: 16, flex: 1, overflow: "auto", animation: "slideIn .15s ease" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
@@ -496,15 +469,9 @@ export default function App() {
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                  <div>
-                    <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>Pressure</div>
-                    <input className="inp" type="number" placeholder="110" value={form.pressure} onChange={e => setForm(f => ({ ...f, pressure: e.target.value }))} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>ระยะเหล็ก (ม.)</div>
-                    <input className="inp" type="number" step="0.1" placeholder="4.0" value={form.follower} onChange={e => setForm(f => ({ ...f, follower: e.target.value }))} />
-                  </div>
+                <div>
+                  <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>Pressure (Pressure)</div>
+                  <input className="inp" type="number" placeholder="110" value={form.pressure} onChange={e => setForm(f => ({ ...f, pressure: e.target.value }))} />
                 </div>
 
                 <div>
@@ -512,17 +479,15 @@ export default function App() {
                   <textarea className="inp" rows={2} placeholder="บันทึกปัญหา หรือข้อมูลเพิ่มเติม..." value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} style={{ resize: "vertical" }} />
                 </div>
 
-                {/* ส่วนแสดงข้อมูลที่บันทึกแล้วแบบ Dashboard ย่อย */}
                 {piles[selPile]?.date && (
                   <div style={{ background: "#0d0f18", borderRadius: 4, padding: 12, fontSize: 12, color: "#333c5a", border: "1px solid #111420", lineHeight: 1.8 }}>
                     <div style={{ color: "#16703a", fontFamily: "'Sarabun',sans-serif", fontSize: 12, marginBottom: 6, fontWeight: "bold" }}>บันทึกล่าสุด ☁️</div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
                       <div>📅 วันที่: <span style={{ color: "#8a94b5" }}>{piles[selPile].date}</span></div>
-                      <div>⏱️ เวลา: <span style={{ color: "#8a94b5" }}>{piles[selPile].startTime || "-"} น. ถึง {piles[selPile].endTime || "-"} น.</span></div>
+                      <div>⏱️ เวลา: <span style={{ color: "#8a94b5" }}>{piles[selPile].startTime || "-"} ถึง {piles[selPile].endTime || "-"} น.</span></div>
                       <div>⏬ Tip: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{piles[selPile].pileTip || "-"}</span> ม.</div>
                       <div>⏫ Top: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{piles[selPile].pileTop || "-"}</span> ม.</div>
                       <div>🗜️ Press: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{piles[selPile].pressure || "-"}</span></div>
-                      <div>📏 ระยะเหล็ก: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{piles[selPile].follower || "-"}</span> ม.</div>
                     </div>
                   </div>
                 )}
