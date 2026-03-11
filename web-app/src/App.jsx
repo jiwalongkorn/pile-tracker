@@ -62,9 +62,16 @@ const ST_BG = { p: "#141620", d: "#0b2117", x: "#210b0b" };
 const ST_BD = { p: "#272c42", d: "#16703a", x: "#8c1c1c" };
 const ST_DOT = { p: "#303654", d: "#22c55e", x: "#ef4444" };
 
+// ✅ อัปเกรด 1: โครงสร้างข้อมูลใหม่ให้ตรงกับหน้างานจริง
 function initPiles() {
   const m = {};
-  for (let i = 1; i <= TOTAL; i++) m[i] = { id: i, s: ST.P, depth: "", set: "", note: "", date: "" };
+  for (let i = 1; i <= TOTAL; i++) {
+    m[i] = {
+      id: i, s: ST.P,
+      date: "", startTime: "", endTime: "",
+      pileTip: "", pileTop: "", pressure: "", follower: "", note: ""
+    };
+  }
   return m;
 }
 
@@ -110,11 +117,22 @@ export default function App() {
     return { done, issue, pending: TOTAL - done - issue, pct: ((done / TOTAL) * 100).toFixed(1) };
   }, [piles]);
 
+  // ✅ ดึงข้อมูลเก่ามาใส่ฟอร์ม
   const openPile = (id) => {
     const p = piles[id];
     setSelPile(id);
     setSelCell(null);
-    setForm({ s: p.s, depth: p.depth || "", set: p.set || "", note: p.note || "", date: p.date || "" });
+    setForm({
+      s: p.s,
+      date: p.date || "",
+      startTime: p.startTime || "",
+      endTime: p.endTime || "",
+      pileTip: p.pileTip || "",
+      pileTop: p.pileTop || "",
+      pressure: p.pressure || "",
+      follower: p.follower || "",
+      note: p.note || ""
+    });
   };
 
   const handleSearch = (e) => {
@@ -242,7 +260,6 @@ export default function App() {
     );
   }
 
-  // ตัวแปรเช็คว่าแผงควบคุมควรแสดงไหม (มีเลือกอะไรสักอย่างอยู่)
   const isPanelOpen = selCell || selPile;
 
   return (
@@ -259,66 +276,34 @@ export default function App() {
         .inp{background:#080a10;border:1px solid #1e2235;border-radius:3px;color:#cdd1e0;padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:16px;width:100%;outline:none}
         .inp:focus{border-color:#16703a}
         
-        /* Layout หลัก */
         .main-content { flex: 1; display: flex; flex-direction: row; overflow: hidden; position: relative; }
         .controls-bar { border-bottom: 1px solid #111420; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; flex-wrap: wrap; justify-content: space-between; }
         
-        /* พื้นหลังมืด (Backdrop) ซ่อนไว้ก่อน */
         .backdrop { display: none; }
         
-        /* แผงควบคุม (Desktop) */
-        .side-panel { width: 300px; border-left: 1px solid #111420; background: #060810; display: flex; flex-direction: column; flex-shrink: 0; z-index: 10; }
+        .side-panel { width: 340px; border-left: 1px solid #111420; background: #060810; display: flex; flex-direction: column; flex-shrink: 0; z-index: 10; }
         .mobile-drag-handle { display: none; }
         
-        /* Responsive สำหรับมือถือ (จอเล็กกว่า 768px) */
         @media (max-width: 768px) {
           .controls-bar { flex-direction: column; align-items: stretch; gap: 12px; }
           .stat-box { flex: 1; text-align: center; }
           .search-box { width: 100%; margin-left: 0 !important; margin-top: 8px; justify-content: space-between; }
           
-          /* พื้นหลังมืดเวลา Bottom Sheet เด้งขึ้นมา */
           .backdrop {
-            display: block;
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.6);
-            backdrop-filter: blur(2px);
-            z-index: 998;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.3s ease;
+            display: block; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(2px); z-index: 998;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
           }
-          .backdrop.open {
-            opacity: 1;
-            pointer-events: auto;
-          }
+          .backdrop.open { opacity: 1; pointer-events: auto; }
 
-          /* แผงควบคุมกลายเป็น Bottom Sheet */
           .side-panel {
-            position: absolute;
-            bottom: 0; left: 0; right: 0;
-            width: 100%;
-            height: auto;
-            max-height: 85vh;
-            border-left: none;
-            border-top: 1px solid #2a3045;
-            border-radius: 20px 20px 0 0;
-            box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
-            z-index: 999;
-            transform: translateY(100%);
-            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1);
+            position: absolute; bottom: 0; left: 0; right: 0; width: 100%;
+            height: auto; max-height: 85vh; border-left: none; border-top: 1px solid #2a3045;
+            border-radius: 20px 20px 0 0; box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
+            z-index: 999; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1);
           }
-          .side-panel.open {
-            transform: translateY(0);
-          }
-          .mobile-drag-handle {
-            display: block;
-            width: 40px;
-            height: 5px;
-            background: #333c5a;
-            border-radius: 3px;
-            margin: 12px auto 5px;
-          }
+          .side-panel.open { transform: translateY(0); }
+          .mobile-drag-handle { display: block; width: 40px; height: 5px; background: #333c5a; border-radius: 3px; margin: 12px auto 5px; }
         }
 
         @keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
@@ -366,7 +351,7 @@ export default function App() {
       {/* BODY */}
       <div className="main-content">
 
-        {/* GRID Area (ใช้พื้นที่ 100% เสมอ) */}
+        {/* GRID Area */}
         <div style={{ flex: 1, overflow: "auto", padding: "16px 20px" }}>
           <div style={{ display: "inline-block", minWidth: "max-content", paddingRight: "40px", paddingBottom: "40px" }}>
             {(() => {
@@ -425,12 +410,10 @@ export default function App() {
           </div>
         </div>
 
-        {/* ✅ อัปเกรด: เพิ่มพื้นหลังมืด (กดเพื่อปิดแผงควบคุมได้) */}
         <div className={`backdrop ${isPanelOpen ? 'open' : ''}`} onClick={closePanel}></div>
 
-        {/* SIDE PANEL (แบบ Bottom Sheet สไลด์ขึ้นบนมือถือ) */}
+        {/* SIDE PANEL */}
         <div className={`side-panel ${isPanelOpen ? 'open' : ''}`}>
-          {/* ขีดจับด้านบน สำหรับมือถือ */}
           <div className="mobile-drag-handle" onClick={closePanel}></div>
 
           {selCell && !selPile && (
@@ -462,26 +445,20 @@ export default function App() {
             </div>
           )}
 
+          {/* ✅ อัปเกรด 2: ฟอร์มบันทึกข้อมูลหน้างานแบบจัดเต็ม */}
           {selPile && form && (
             <div style={{ padding: 16, flex: 1, overflow: "auto", animation: "slideIn .15s ease" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                 <div>
-                  <div style={{ fontSize: 10, color: "#1e2235", letterSpacing: 2 }}>บันทึกข้อมูล</div>
-                  <div style={{ fontFamily: "'Sarabun',sans-serif", fontSize: 20, fontWeight: 700, color: "#fbbf24" }}>เสาเข็ม #{selPile}</div>
+                  <div style={{ fontSize: 10, color: "#1e2235", letterSpacing: 2 }}>บันทึกข้อมูลหน้างาน</div>
+                  <div style={{ fontFamily: "'Sarabun',sans-serif", fontSize: 22, fontWeight: 700, color: "#fbbf24" }}>เสาเข็ม #{selPile}</div>
                 </div>
                 <button onClick={closePanel} style={{ background: "none", border: "none", color: "#333c5a", cursor: "pointer", fontSize: 24, padding: "0 5px" }}>✕</button>
               </div>
 
-              <div style={{ background: "#141825", padding: "10px 12px", borderRadius: 4, marginBottom: 16, fontSize: 11, color: "#8a94b5", border: "1px dashed #2a3045", fontFamily: "'Sarabun',sans-serif", lineHeight: 1.6 }}>
-                <div style={{ color: "#cdd1e0", fontWeight: 'bold', marginBottom: 4 }}>📝 สเปกอ้างอิง (แบบ ST-04)</div>
-                <div>• ขนาด: PC PILE S-40 22 m.Depth</div>
-                <div>• รับน้ำหนัก: Safe Load 40 Tons/Pile</div>
-                <div>• เหล็กโผล่: Dowel 4-DB16 L=2.50m</div>
-              </div>
-
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 <div>
-                  <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>สถานะ</div>
+                  <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>สถานะเสาเข็ม</div>
                   <div style={{ display: "flex", gap: 6 }}>
                     {Object.entries(ST_TH).map(([k, v]) => (
                       <button key={k} onClick={() => setForm(f => ({ ...f, s: k }))} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: form.s === k ? 700 : 400, background: form.s === k ? ST_BG[k] : "transparent", border: `1px solid ${form.s === k ? ST_BD[k] : "#1e2235"}`, color: form.s === k ? "#cdd1e0" : "#333c5a" }}>
@@ -490,37 +467,69 @@ export default function App() {
                     ))}
                   </div>
                 </div>
-                <div>
-                  <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>วันที่กด</div>
-                  <input className="inp" type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
-                </div>
+
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <div>
-                    <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>ความลึก (ม.)</div>
-                    <input className="inp" type="number" step="0.1" placeholder="22.00" value={form.depth} onChange={e => setForm(f => ({ ...f, depth: e.target.value }))} />
+                    <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>วันที่กด</div>
+                    <input className="inp" type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} style={{ fontSize: 14 }} />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>เริ่มกด</div>
+                      <input className="inp" type="time" value={form.startTime} onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))} style={{ padding: "8px 4px", fontSize: 13 }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>กดจบ</div>
+                      <input className="inp" type="time" value={form.endTime} onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))} style={{ padding: "8px 4px", fontSize: 13 }} />
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>Pile Tip (ม.)</div>
+                    <input className="inp" type="number" step="0.01" placeholder="17.40" value={form.pileTip} onChange={e => setForm(f => ({ ...f, pileTip: e.target.value }))} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>ค่า Set (มม.)</div>
-                    <input className="inp" type="number" step="0.5" placeholder="5" value={form.set} onChange={e => setForm(f => ({ ...f, set: e.target.value }))} />
+                    <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>Pile Top (ม.)</div>
+                    <input className="inp" type="number" step="0.01" placeholder="+4.60" value={form.pileTop} onChange={e => setForm(f => ({ ...f, pileTop: e.target.value }))} />
                   </div>
                 </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>Pressure</div>
+                    <input className="inp" type="number" placeholder="110" value={form.pressure} onChange={e => setForm(f => ({ ...f, pressure: e.target.value }))} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>ระยะเหล็ก (ม.)</div>
+                    <input className="inp" type="number" step="0.1" placeholder="4.0" value={form.follower} onChange={e => setForm(f => ({ ...f, follower: e.target.value }))} />
+                  </div>
+                </div>
+
                 <div>
                   <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>หมายเหตุ</div>
-                  <textarea className="inp" rows={3} placeholder="บันทึกปัญหา หรือข้อมูลเพิ่มเติม..." value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} style={{ resize: "vertical" }} />
+                  <textarea className="inp" rows={2} placeholder="บันทึกปัญหา หรือข้อมูลเพิ่มเติม..." value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} style={{ resize: "vertical" }} />
                 </div>
+
+                {/* ส่วนแสดงข้อมูลที่บันทึกแล้วแบบ Dashboard ย่อย */}
                 {piles[selPile]?.date && (
                   <div style={{ background: "#0d0f18", borderRadius: 4, padding: 12, fontSize: 12, color: "#333c5a", border: "1px solid #111420", lineHeight: 1.8 }}>
-                    <div style={{ color: "#16703a", fontFamily: "'Sarabun',sans-serif", fontSize: 12, marginBottom: 4, fontWeight: "bold" }}>บันทึกล่าสุด ☁️</div>
-                    <div>วันที่: {piles[selPile].date}</div>
-                    {piles[selPile].depth && <div>ลึก: {piles[selPile].depth} ม.</div>}
-                    {piles[selPile].set && <div>Set: {piles[selPile].set} มม.</div>}
+                    <div style={{ color: "#16703a", fontFamily: "'Sarabun',sans-serif", fontSize: 12, marginBottom: 6, fontWeight: "bold" }}>บันทึกล่าสุด ☁️</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+                      <div>📅 วันที่: <span style={{ color: "#8a94b5" }}>{piles[selPile].date}</span></div>
+                      <div>⏱️ เวลา: <span style={{ color: "#8a94b5" }}>{piles[selPile].startTime || "-"} น. ถึง {piles[selPile].endTime || "-"} น.</span></div>
+                      <div>⏬ Tip: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{piles[selPile].pileTip || "-"}</span> ม.</div>
+                      <div>⏫ Top: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{piles[selPile].pileTop || "-"}</span> ม.</div>
+                      <div>🗜️ Press: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{piles[selPile].pressure || "-"}</span></div>
+                      <div>📏 ระยะเหล็ก: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{piles[selPile].follower || "-"}</span> ม.</div>
+                    </div>
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* Save bar */}
           {selPile && form ? (
             <div style={{ padding: 16, borderTop: "1px solid #111420", display: "flex", gap: 10, background: "#060810" }}>
               <button onClick={savePile} style={{ flex: 1, padding: "12px", borderRadius: 4, border: "1px solid #16703a", background: "#0b2117", color: "#22c55e", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 15 }}>บันทึก ☁️</button>
