@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
 import { doc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
-import { db } from "./firebase"; // ดึงฐานข้อมูลที่เราตั้งค่าไว้มาใช้
+import { db } from "./firebase";
 
 // ============================================================
-// ข้อมูล GRID คงเดิม ไม่เปลี่ยนแปลง
+// ข้อมูล GRID คงเดิม (ถูกต้องตามแบบ RFA-004 แล้ว)
 // ============================================================
 const ROWS_META = [
   { id: "A", type: "edge", dir: "LR" }, { id: "A'", type: "inter", dir: "RL" },
@@ -68,6 +68,20 @@ function initPiles() {
   return m;
 }
 
+// ฟังก์ชันสำหรับหาระบุพิกัด Cell จากเบอร์เสาเข็ม
+function findCellByPileId(targetId) {
+  const numId = parseInt(targetId);
+  for (const rowId of Object.keys(GRID_DATA)) {
+    const row = GRID_DATA[rowId];
+    for (let colIdx = 0; colIdx < row.length; colIdx++) {
+      if (row[colIdx].includes(numId)) {
+        return { rowId, colIdx, pileIds: row[colIdx] };
+      }
+    }
+  }
+  return null;
+}
+
 export default function App() {
   const [piles, setPiles] = useState(initPiles());
   const [selPile, setSelPile] = useState(null);
@@ -75,27 +89,21 @@ export default function App() {
   const [form, setForm] = useState(null);
   const [filter, setFilter] = useState("all");
   const [zoom, setZoom] = useState(1.0);
-  const [loading, setLoading] = useState(true); // เพิ่ม State สำหรับโหลดข้อมูล
+  const [loading, setLoading] = useState(true);
+  const [searchQ, setSearchQ] = useState(""); // State สำหรับระบบค้นหา
 
-  // ระบุตำแหน่งที่จะเก็บข้อมูลใน Firestore (Collection: projects, Document: pile-st04)
   const docRef = doc(db, "projects", "pile-st04");
 
-  // ============================================================
-  // ดึงข้อมูลและอัปเดตแบบ Real-time จาก Firebase
-  // ============================================================
   useEffect(() => {
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
-        // ถ้ามีข้อมูลในฐานข้อมูล ให้นำมาใช้
         setPiles(prev => ({ ...prev, ...docSnap.data() }));
       } else {
-        // ถ้าเป็นการใช้งานครั้งแรกสุด ให้สร้างข้อมูลเปล่าๆ ขึ้นไปเซฟบน Firebase
         setDoc(docRef, initPiles());
       }
       setLoading(false);
     });
-
-    return () => unsubscribe(); // ล้างการเชื่อมต่อเมื่อปิดหน้าเว็บ
+    return () => unsubscribe();
   }, []);
 
   const stats = useMemo(() => {
@@ -112,9 +120,21 @@ export default function App() {
     setForm({ s: p.s, depth: p.depth || "", set: p.set || "", note: p.note || "", date: p.date || "" });
   };
 
-  // ============================================================
-  // บันทึกข้อมูลเสาเข็ม 1 ต้น ลง Firebase
-  // ============================================================
+  const handleSearch = (e) => {
+    const val = e.target.value;
+    setSearchQ(val);
+    if (!val) {
+      setSelCell(null);
+      setSelPile(null);
+      return;
+    }
+    const foundCell = findCellByPileId(val);
+    if (foundCell) {
+      setSelCell(foundCell);
+      openPile(val);
+    }
+  };
+
   const savePile = async () => {
     if (!selPile) return;
     const updatedPile = {
@@ -123,38 +143,26 @@ export default function App() {
       date: form.date || new Date().toISOString().slice(0, 10)
     };
 
-    // เซฟทับลงฐานข้อมูลเฉพาะต้นที่แก้ไข
     try {
-      await updateDoc(docRef, {
-        [selPile]: updatedPile
-      });
-      setSelPile(null); setForm(null);
+      await updateDoc(docRef, { [selPile]: updatedPile });
+      setSelPile(null); setForm(null); setSearchQ("");
     } catch (error) {
       console.error("Error saving pile:", error);
       alert("ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่");
     }
   };
 
-  // ============================================================
-  // อัปเดตสถานะแบบรวดเดียว (ทั้ง Cell) ลง Firebase
-  // ============================================================
   const markCell = async (ids, status) => {
     const date = new Date().toISOString().slice(0, 10);
     const updates = {};
-
-    ids.forEach(id => {
-      updates[id] = { ...piles[id], s: status, date };
-    });
-
+    ids.forEach(id => { updates[id] = { ...piles[id], s: status, date }; });
     try {
       await updateDoc(docRef, updates);
     } catch (error) {
       console.error("Error updating cell:", error);
-      alert("ไม่สามารถบันทึกข้อมูลได้");
     }
   };
 
-  // ฟังก์ชันคำนวณ Grid คงเดิม
   const isMainCol = (ci) => ci % 2 === 0;
   const isInterRow = (meta) => meta.type === "inter";
   const f2IsHorizontal = (ci, rowType) => {
@@ -167,7 +175,9 @@ export default function App() {
     const p = piles[id];
     const dim = filter !== "all" && p.s !== filter;
     const isSel = selPile === id;
+    const isSearched = searchQ && String(id) === searchQ;
     const sz = Math.round(8 * zoom);
+
     return (
       <div
         title={`#${id}`}
@@ -175,12 +185,13 @@ export default function App() {
         style={{
           width: sz, height: sz, borderRadius: "50%", flexShrink: 0,
           background: ST_DOT[p.s],
-          border: `1px solid ${isSel ? "#fbbf24" : p.s === ST.D ? "#16703a" : p.s === ST.X ? "#8c1c1c" : "#272c42"}`,
-          boxShadow: isSel ? `0 0 0 2px #fbbf24` : p.s === ST.D ? "0 0 3px rgba(34,197,94,0.5)" : "none",
+          border: `1px solid ${isSel || isSearched ? "#fbbf24" : p.s === ST.D ? "#16703a" : p.s === ST.X ? "#8c1c1c" : "#272c42"}`,
+          boxShadow: isSearched ? `0 0 10px 4px #fbbf24` : isSel ? `0 0 0 2px #fbbf24` : p.s === ST.D ? "0 0 3px rgba(34,197,94,0.5)" : "none",
           opacity: dim ? 0.1 : 1,
           cursor: "pointer",
           transition: "transform .08s",
-          zIndex: isSel ? 10 : 1, position: "relative",
+          zIndex: isSel || isSearched ? 10 : 1, position: "relative",
+          animation: isSearched ? "glowPulse 1.5s infinite alternate" : "none"
         }}
         onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.7)"; e.currentTarget.style.zIndex = 8; }}
         onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.zIndex = isSel ? 10 : 1; }}
@@ -209,7 +220,7 @@ export default function App() {
 
     return (
       <div
-        title={`${rowId}-${COL_LABELS[colIdx]}: #${pileIds.join(", #")}`}
+        title={`${rowId}-${COL_LABELS[colIdx]}: #${pileIds.join(", #")} ${isF2 ? (horiz ? "(F2,C1)" : "(F2,C2)") : ""}`}
         onClick={() => setSelCell(isSel ? null : { rowId, colIdx, pileIds })}
         style={{
           width: cellW, height: cellH, flexShrink: 0,
@@ -230,7 +241,6 @@ export default function App() {
     );
   };
 
-  // แสดงหน้าจอโหลดก่อน Firebase จะดึงข้อมูลเสร็จ
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", background: "#080a10", color: "#cdd1e0", display: "flex", justifyContent: "center", alignItems: "center", fontFamily: "'Sarabun',sans-serif" }}>
@@ -258,6 +268,7 @@ export default function App() {
         .inp:focus{border-color:#16703a}
         @keyframes slideIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:translateX(0)}}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+        @keyframes glowPulse{from{box-shadow:0 0 5px 2px #fbbf24;}to{box-shadow:0 0 15px 5px #fbbf24;}}
       `}</style>
 
       {/* HEADER */}
@@ -281,15 +292,31 @@ export default function App() {
         </div>
       </div>
 
-      {/* CONTROLS */}
-      <div style={{ borderBottom: "1px solid #111420", padding: "7px 16px", display: "flex", alignItems: "center", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
-        {[{ l: "ทั้งหมด", v: TOTAL, c: "#cdd1e0" }, { l: "กดแล้ว", v: stats.done, c: "#22c55e" }, { l: "ยังไม่กด", v: stats.pending, c: "#333c5a" }, { l: "มีปัญหา", v: stats.issue, c: "#ef4444" }].map(({ l, v, c }) => (
-          <div key={l} style={{ background: "#0d0f18", border: "1px solid #111420", borderRadius: 3, padding: "5px 12px", marginRight: 3 }}>
-            <div style={{ fontSize: 7, color: "#252c42", fontFamily: "'Sarabun',sans-serif" }}>{l}</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: c }}>{v.toLocaleString()}</div>
+      {/* CONTROLS & SEARCH */}
+      <div style={{ borderBottom: "1px solid #111420", padding: "7px 16px", display: "flex", alignItems: "center", gap: 8, flexShrink: 0, flexWrap: "wrap", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {[{ l: "ทั้งหมด", v: TOTAL, c: "#cdd1e0" }, { l: "กดแล้ว", v: stats.done, c: "#22c55e" }, { l: "ยังไม่กด", v: stats.pending, c: "#333c5a" }, { l: "มีปัญหา", v: stats.issue, c: "#ef4444" }].map(({ l, v, c }) => (
+            <div key={l} style={{ background: "#0d0f18", border: "1px solid #111420", borderRadius: 3, padding: "5px 12px", marginRight: 3 }}>
+              <div style={{ fontSize: 7, color: "#252c42", fontFamily: "'Sarabun',sans-serif" }}>{l}</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: c }}>{v.toLocaleString()}</div>
+            </div>
+          ))}
+
+          {/* ช่องค้นหาเบอร์เสาเข็ม */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 10, background: "#0d0f18", padding: "5px 10px", borderRadius: 3, border: "1px solid #1e2235" }}>
+            <span style={{ fontSize: 11, color: "#555d7a", fontFamily: "'Sarabun',sans-serif" }}>🔍 ค้นหาเบอร์:</span>
+            <input
+              className="inp"
+              type="number"
+              placeholder="เช่น 102"
+              value={searchQ}
+              onChange={handleSearch}
+              style={{ width: 80, padding: "2px 6px", fontSize: 14, background: "transparent", border: "none", borderBottom: "1px solid #333c5a", borderRadius: 0 }}
+            />
           </div>
-        ))}
-        <div style={{ marginLeft: "auto", display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
+        </div>
+
+        <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ display: "flex", gap: 4 }}>
             {["all", "p", "d", "x"].map(s => (
               <button key={s} className={`pill ${filter === s ? "on" : ""}`} onClick={() => setFilter(s)}>
@@ -405,7 +432,7 @@ export default function App() {
               <div style={{ fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 14, color: "#fbbf24", marginBottom: 6 }}>
                 แถว {selCell.rowId} · Col {COL_LABELS[selCell.colIdx]}
                 <span style={{ marginLeft: 8, fontSize: 10, color: selCell.pileIds.length === 2 ? "#60a5fa" : "#a78bfa", fontWeight: 400 }}>
-                  F{selCell.pileIds.length}
+                  F{selCell.pileIds.length} {selCell.pileIds.length === 2 ? (f2IsHorizontal(selCell.colIdx, ROWS_META.find(r => r.id === selCell.rowId).type) ? "C1" : "C2") : ""}
                 </span>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 10 }}>
@@ -436,7 +463,15 @@ export default function App() {
                   <div style={{ fontSize: 8, color: "#1e2235", letterSpacing: 2 }}>บันทึกข้อมูล</div>
                   <div style={{ fontFamily: "'Sarabun',sans-serif", fontSize: 16, fontWeight: 700, color: "#fbbf24" }}>เสาเข็ม #{selPile}</div>
                 </div>
-                <button onClick={() => { setSelPile(null); setForm(null); }} style={{ background: "none", border: "none", color: "#333c5a", cursor: "pointer", fontSize: 16 }}>✕</button>
+                <button onClick={() => { setSelPile(null); setForm(null); setSearchQ(""); }} style={{ background: "none", border: "none", color: "#333c5a", cursor: "pointer", fontSize: 16 }}>✕</button>
+              </div>
+
+              {/* แสดงสเปกจากหน้าแบบ ST-04 */}
+              <div style={{ background: "#141825", padding: "8px 10px", borderRadius: 3, marginBottom: 12, fontSize: 9, color: "#8a94b5", border: "1px dashed #2a3045", fontFamily: "'Sarabun',sans-serif", lineHeight: 1.6 }}>
+                <div style={{ color: "#cdd1e0", fontWeight: 'bold', marginBottom: 2 }}>📝 สเปกอ้างอิง (แบบ ST-04)</div>
+                <div>• ขนาด: PC PILE S-40 22 m.Depth</div>
+                <div>• รับน้ำหนัก: Safe Load 40 Tons/Pile</div>
+                <div>• เหล็กโผล่: Dowel 4-DB16 L=2.50m</div>
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -457,7 +492,7 @@ export default function App() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
                   <div>
                     <div style={{ fontSize: 9, color: "#333c5a", marginBottom: 4, fontFamily: "'Sarabun',sans-serif" }}>ความลึก (ม.)</div>
-                    <input className="inp" type="number" step="0.1" placeholder="12.50" value={form.depth} onChange={e => setForm(f => ({ ...f, depth: e.target.value }))} />
+                    <input className="inp" type="number" step="0.1" placeholder="22.00" value={form.depth} onChange={e => setForm(f => ({ ...f, depth: e.target.value }))} />
                   </div>
                   <div>
                     <div style={{ fontSize: 9, color: "#333c5a", marginBottom: 4, fontFamily: "'Sarabun',sans-serif" }}>ค่า Set (มม.)</div>
@@ -484,13 +519,13 @@ export default function App() {
           {selPile && form ? (
             <div style={{ padding: 12, borderTop: "1px solid #111420", display: "flex", gap: 7 }}>
               <button onClick={savePile} style={{ flex: 1, padding: "8px", borderRadius: 3, border: "1px solid #16703a", background: "#0b2117", color: "#22c55e", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 13 }}>บันทึก ☁️</button>
-              <button onClick={() => { setSelPile(null); setForm(null); }} style={{ padding: "8px 12px", borderRadius: 3, border: "1px solid #1e2235", background: "#0d0f18", color: "#555d7a", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 12 }}>ยกเลิก</button>
+              <button onClick={() => { setSelPile(null); setForm(null); setSearchQ(""); }} style={{ padding: "8px 12px", borderRadius: 3, border: "1px solid #1e2235", background: "#0d0f18", color: "#555d7a", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 12 }}>ยกเลิก</button>
             </div>
           ) : !selCell ? (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", color: "#151825", textAlign: "center", padding: 20 }}>
               <div style={{ fontSize: 26, marginBottom: 10, opacity: .4 }}>☁️</div>
               <div style={{ fontSize: 11, fontFamily: "'Sarabun',sans-serif", lineHeight: 1.9 }}>
-                ซิงค์ข้อมูลกับ Firebase แล้ว<br />คลิก cell เพื่อทดสอบอัปเดต
+                พิมพ์เบอร์เสาเข็มในช่องค้นหา<br />หรือคลิกบน Grid เพื่ออัปเดต
               </div>
             </div>
           ) : null}

@@ -1,8 +1,6 @@
-// Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+// เปลี่ยนมาใช้คำสั่ง initializeFirestore สำหรับเวอร์ชันใหม่
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 
 
 
@@ -16,8 +14,9 @@ const firebaseConfig = {
     appId: "1:607456231968:web:d989639d47f7e46bc5f245"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// สั่งเปิดใช้งานฐานข้อมูล Firestore
-export const db = getFirestore(app);
+// เปิดใช้งานฐานข้อมูล พร้อมระบบ Offline Support (ทนทานต่อเน็ตหลุด)
+export const db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
