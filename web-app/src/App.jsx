@@ -63,12 +63,22 @@ const ST_BG = { p: "#141620", d: "#0b2117", x: "#210b0b" };
 const ST_BD = { p: "#272c42", d: "#16703a", x: "#8c1c1c" };
 const ST_DOT = { p: "#303654", d: "#22c55e", x: "#ef4444" };
 
+// ── สีแยกประเภทปัญหา (4 สี) ──
+const ISSUE_COLORS = {
+  red:    { key: "red",    label: "เพลทเอียง/ไม่ได้ฉาก", dot: "#ef4444", bg: "#210b0b", bd: "#8c1c1c" },
+  orange: { key: "orange", label: "เสาเข็มแตก/ชำรุด",     dot: "#f97316", bg: "#211505", bd: "#9a4a0c" },
+  yellow: { key: "yellow", label: "ความลึกไม่ถึงเป้า",    dot: "#eab308", bg: "#211d05", bd: "#8a6d0a" },
+  blue:   { key: "blue",   label: "อื่นๆ",               dot: "#3b82f6", bg: "#0b1121", bd: "#1e4a8c" },
+};
+const ISSUE_COLOR_KEYS = Object.keys(ISSUE_COLORS);
+const DEFAULT_ISSUE_COLOR = "red";
+
 // ข้อมูลเริ่มต้นให้ตรงกับหน้างานจริง (เอาช่องระยะส่งออกแล้ว)
 function initPiles() {
   const m = {};
   for (let i = 1; i <= TOTAL; i++) {
     m[i] = {
-      id: i, s: ST.P,
+      id: i, s: ST.P, issueColor: "",
       date: "", startTime: "", endTime: "",
       pileTip: "", pileTop: "", pressure: "", note: ""
     };
@@ -96,6 +106,7 @@ export default function App() {
   const [zoom, setZoom] = useState(1.0);
   const [loading, setLoading] = useState(true);
   const [searchQ, setSearchQ] = useState("");
+  const [cellIssueMenu, setCellIssueMenu] = useState(false);
 
   // ── ฟังก์ชันหาแถว/คอลัมน์ของเสาเข็ม ──
   const findRowColForPile = (pileId) => {
@@ -116,11 +127,13 @@ export default function App() {
     for (let i = 1; i <= TOTAL; i++) {
       const p = piles[i];
       const pos = findRowColForPile(i);
+      const issueLabel = p.s === ST.X && p.issueColor ? (ISSUE_COLORS[p.issueColor]?.label || "") : "";
       rows.push({
         "เบอร์เสาเข็ม": i,
         "แถว": pos.row,
         "คอลัมน์": pos.col,
         "สถานะ": statusMap[p.s] || p.s,
+        "ประเภทปัญหา": issueLabel,
         "วันที่": p.date || "",
         "เวลาเริ่ม": p.startTime || "",
         "เวลาจบ": p.endTime || "",
@@ -131,9 +144,8 @@ export default function App() {
       });
     }
     const ws = XLSX.utils.json_to_sheet(rows);
-    // ตั้งความกว้างคอลัมน์
     ws["!cols"] = [
-      { wch: 14 }, { wch: 6 }, { wch: 8 }, { wch: 12 },
+      { wch: 14 }, { wch: 6 }, { wch: 8 }, { wch: 12 }, { wch: 22 },
       { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 14 },
       { wch: 14 }, { wch: 12 }, { wch: 30 },
     ];
@@ -170,6 +182,7 @@ export default function App() {
     setSelCell(null);
     setForm({
       s: p.s,
+      issueColor: p.issueColor || (p.s === ST.X ? DEFAULT_ISSUE_COLOR : ""),
       date: p.date || "",
       startTime: p.startTime || "",
       endTime: p.endTime || "",
@@ -209,12 +222,15 @@ export default function App() {
     }
   };
 
-  const markCell = async (ids, status) => {
+  const markCell = async (ids, status, issueColor = "") => {
     const date = new Date().toISOString().slice(0, 10);
     const updates = {};
-    ids.forEach(id => { updates[id] = { ...piles[id], s: status, date }; });
+    ids.forEach(id => {
+      updates[id] = { ...piles[id], s: status, date, issueColor: status === ST.X ? (issueColor || DEFAULT_ISSUE_COLOR) : "" };
+    });
     try {
       await updateDoc(docRef, updates);
+      setCellIssueMenu(false);
     } catch (error) { }
   };
 
@@ -226,10 +242,28 @@ export default function App() {
 
   const Dot = ({ id }) => {
     const p = piles[id];
-    const dim = filter !== "all" && p.s !== filter;
+    // filter: "all", "p", "d", "x", "x_red", "x_orange", "x_yellow", "x_blue"
+    let dim = false;
+    if (filter !== "all") {
+      if (filter.startsWith("x_")) {
+        const fc = filter.replace("x_", "");
+        dim = !(p.s === ST.X && (p.issueColor || DEFAULT_ISSUE_COLOR) === fc);
+      } else {
+        dim = p.s !== filter;
+      }
+    }
     const isSel = selPile === id;
     const isSearched = searchQ && String(id) === searchQ;
     const sz = Math.round(12 * zoom);
+
+    // ใช้สีตาม issueColor ถ้าสถานะ = มีปัญหา
+    let dotColor = ST_DOT[p.s];
+    let borderColor = p.s === ST.D ? "#16703a" : p.s === ST.X ? "#8c1c1c" : "#272c42";
+    if (p.s === ST.X) {
+      const ic = ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR];
+      dotColor = ic.dot;
+      borderColor = ic.bd;
+    }
 
     return (
       <div
@@ -237,8 +271,8 @@ export default function App() {
         onClick={e => { e.stopPropagation(); openPile(id); }}
         style={{
           width: sz, height: sz, borderRadius: "50%", flexShrink: 0,
-          background: ST_DOT[p.s],
-          border: `1px solid ${isSel || isSearched ? "#fbbf24" : p.s === ST.D ? "#16703a" : p.s === ST.X ? "#8c1c1c" : "#272c42"}`,
+          background: dotColor,
+          border: `1px solid ${isSel || isSearched ? "#fbbf24" : borderColor}`,
           boxShadow: isSearched ? `0 0 10px 4px #fbbf24` : isSel ? `0 0 0 2px #fbbf24` : p.s === ST.D ? "0 0 3px rgba(34,197,94,0.5)" : "none",
           opacity: dim ? 0.1 : 1,
           cursor: "pointer",
@@ -466,8 +500,8 @@ export default function App() {
                 {selCell.pileIds.map(id => {
                   const p = piles[id];
                   return (
-                    <div key={id} onClick={() => openPile(id)} style={{ display: "flex", alignItems: "center", gap: 6, background: ST_BG[p.s], border: `1px solid ${ST_BD[p.s]}`, borderRadius: 4, padding: "6px 10px", cursor: "pointer", fontSize: 13, color: "#cdd1e0" }}>
-                      <div style={{ width: 10, height: 10, borderRadius: "50%", background: ST_DOT[p.s] }} />
+                    <div key={id} onClick={() => openPile(id)} style={{ display: "flex", alignItems: "center", gap: 6, background: p.s === ST.X ? (ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR]).bg : ST_BG[p.s], border: `1px solid ${p.s === ST.X ? (ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR]).bd : ST_BD[p.s]}`, borderRadius: 4, padding: "6px 10px", cursor: "pointer", fontSize: 13, color: "#cdd1e0" }}>
+                      <div style={{ width: 10, height: 10, borderRadius: "50%", background: p.s === ST.X ? (ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR]).dot : ST_DOT[p.s] }} />
                       #{id}
                     </div>
                   );
@@ -475,9 +509,23 @@ export default function App() {
               </div>
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={() => markCell(selCell.pileIds, ST.D)} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", background: "#0b2117", border: "1px solid #16703a", color: "#22c55e" }}>✓ กดแล้ว</button>
-                <button onClick={() => markCell(selCell.pileIds, ST.X)} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", background: "#210b0b", border: "1px solid #8c1c1c", color: "#ef4444" }}>! ปัญหา</button>
+                <button onClick={() => setCellIssueMenu(v => !v)} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", background: "#210b0b", border: "1px solid #8c1c1c", color: "#ef4444" }}>! ปัญหา ▾</button>
                 <button onClick={() => markCell(selCell.pileIds, ST.P)} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", background: "#141620", border: "1px solid #272c42", color: "#555d7a" }}>↺ รีเซ็ต</button>
               </div>
+              {cellIssueMenu && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, animation: "slideIn .15s ease" }}>
+                  <div style={{ fontSize: 10, color: "#555d7a", marginBottom: 2, fontFamily: "'Sarabun',sans-serif" }}>เลือกประเภทปัญหา:</div>
+                  {ISSUE_COLOR_KEYS.map(ck => {
+                    const ic = ISSUE_COLORS[ck];
+                    return (
+                      <button key={ck} onClick={() => markCell(selCell.pileIds, ST.X, ck)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 13, background: ic.bg, border: `1px solid ${ic.bd}`, color: ic.dot }}>
+                        <div style={{ width: 12, height: 12, borderRadius: "50%", background: ic.dot, flexShrink: 0 }} />
+                        {ic.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -496,11 +544,28 @@ export default function App() {
                   <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>สถานะเสาเข็ม</div>
                   <div style={{ display: "flex", gap: 6 }}>
                     {Object.entries(ST_TH).map(([k, v]) => (
-                      <button key={k} onClick={() => setForm(f => ({ ...f, s: k }))} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: form.s === k ? 700 : 400, background: form.s === k ? ST_BG[k] : "transparent", border: `1px solid ${form.s === k ? ST_BD[k] : "#1e2235"}`, color: form.s === k ? "#cdd1e0" : "#333c5a" }}>
+                      <button key={k} onClick={() => setForm(f => ({ ...f, s: k, issueColor: k === ST.X ? (f.issueColor || DEFAULT_ISSUE_COLOR) : "" }))} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: form.s === k ? 700 : 400, background: form.s === k ? ST_BG[k] : "transparent", border: `1px solid ${form.s === k ? ST_BD[k] : "#1e2235"}`, color: form.s === k ? "#cdd1e0" : "#333c5a" }}>
                         {v}
                       </button>
                     ))}
                   </div>
+                  {form.s === ST.X && (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ fontSize: 10, color: "#555d7a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>เลือกประเภทปัญหา:</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {ISSUE_COLOR_KEYS.map(ck => {
+                          const ic = ISSUE_COLORS[ck];
+                          const active = form.issueColor === ck;
+                          return (
+                            <button key={ck} onClick={() => setForm(f => ({ ...f, issueColor: ck }))} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 12, fontWeight: active ? 700 : 400, background: active ? ic.bg : "transparent", border: `1px solid ${active ? ic.bd : "#1e2235"}`, color: active ? ic.dot : "#555d7a" }}>
+                            <div style={{ width: 10, height: 10, borderRadius: "50%", background: ic.dot, flexShrink: 0 }} />
+                            {ic.label}
+                          </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
