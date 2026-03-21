@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { doc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
+import * as XLSX from "xlsx";
 
 // ============================================================
 // ข้อมูล GRID คงเดิม (อ้างอิงตามแบบ ST-04 และ RFA-004)
@@ -95,6 +96,52 @@ export default function App() {
   const [zoom, setZoom] = useState(1.0);
   const [loading, setLoading] = useState(true);
   const [searchQ, setSearchQ] = useState("");
+
+  // ── ฟังก์ชันหาแถว/คอลัมน์ของเสาเข็ม ──
+  const findRowColForPile = (pileId) => {
+    const numId = parseInt(pileId);
+    for (const rowId of Object.keys(GRID_DATA)) {
+      const row = GRID_DATA[rowId];
+      for (let colIdx = 0; colIdx < row.length; colIdx++) {
+        if (row[colIdx].includes(numId)) return { row: rowId, col: COL_LABELS[colIdx] };
+      }
+    }
+    return { row: "-", col: "-" };
+  };
+
+  // ── Export ข้อมูลเสาเข็มเป็น Excel ──
+  const exportToExcel = () => {
+    const statusMap = { p: "ยังไม่กด", d: "กดแล้ว", x: "มีปัญหา" };
+    const rows = [];
+    for (let i = 1; i <= TOTAL; i++) {
+      const p = piles[i];
+      const pos = findRowColForPile(i);
+      rows.push({
+        "เบอร์เสาเข็ม": i,
+        "แถว": pos.row,
+        "คอลัมน์": pos.col,
+        "สถานะ": statusMap[p.s] || p.s,
+        "วันที่": p.date || "",
+        "เวลาเริ่ม": p.startTime || "",
+        "เวลาจบ": p.endTime || "",
+        "Pile Tip (ม.)": p.pileTip || "",
+        "Pile Top (ม.)": p.pileTop || "",
+        "Pressure": p.pressure || "",
+        "หมายเหตุ": p.note || "",
+      });
+    }
+    const ws = XLSX.utils.json_to_sheet(rows);
+    // ตั้งความกว้างคอลัมน์
+    ws["!cols"] = [
+      { wch: 14 }, { wch: 6 }, { wch: 8 }, { wch: 12 },
+      { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 14 },
+      { wch: 14 }, { wch: 12 }, { wch: 30 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Pile Data");
+    const today = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `PileTracker_${today}.xlsx`);
+  };
 
   const docRef = doc(db, "projects", "pile-st04");
 
@@ -302,6 +349,21 @@ export default function App() {
           <div style={{ fontSize: 9, color: "#1e2235", letterSpacing: 3 }}>GRID A–M × 1–21 · F1/F2 · 1,111 PILES</div>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
+          <button
+            onClick={exportToExcel}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "7px 14px", borderRadius: 4,
+              border: "1px solid #1e2235", background: "#0d0f18",
+              color: "#8a94b5", cursor: "pointer",
+              fontFamily: "'Sarabun',sans-serif", fontSize: 13, fontWeight: 600,
+              transition: "all .15s",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = "#141825"; e.currentTarget.style.borderColor = "#16703a"; e.currentTarget.style.color = "#22c55e"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "#0d0f18"; e.currentTarget.style.borderColor = "#1e2235"; e.currentTarget.style.color = "#8a94b5"; }}
+          >
+            📥 Export Excel
+          </button>
           <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
             <span style={{ fontSize: 14, color: "#22c55e", fontWeight: 600 }}>{stats.pct}%</span>
           </div>
