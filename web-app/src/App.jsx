@@ -497,36 +497,42 @@ export default function App() {
     const pileId = selRemPile || selPile;
     if (!pileId) return;
 
-    // อัพโหลดรูปถ้ามี
-    let photoUrl = "";
-    if (photoFile) {
-      try {
-        const compressed = await compressImage(photoFile, 1200, 0.7);
-        photoUrl = await uploadPilePhoto(compressed, pileId);
-      } catch (err) {
-        console.error("Photo upload error:", err);
-        // ยังบันทึกข้อมูลต่อได้แม้อัพรูปล้มเหลว
-      }
-    }
-
-    if (selRemPile) {
-      const updatedRp = { ...remPiles[selRemPile], ...form, date: form.date || new Date().toISOString().slice(0, 10) };
-      if (photoUrl) updatedRp.photoUrl = photoUrl;
-      try {
+    // บันทึกข้อมูลก่อน (ไม่รอรูป)
+    const dateVal = form.date || new Date().toISOString().slice(0, 10);
+    try {
+      if (selRemPile) {
+        const updatedRp = { ...remPiles[selRemPile], ...form, date: dateVal };
         await updateDoc(docRef, { _remPiles: { ...remPiles, [selRemPile]: updatedRp } });
-        closePanel();
-      } catch (error) {
-        alert("ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่");
+      } else {
+        const updatedPile = { ...piles[selPile], ...form, date: dateVal };
+        await updateDoc(docRef, { [selPile]: updatedPile });
       }
+    } catch (error) {
+      console.error("Save error:", error);
+      alert("ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่\n\n" + error.message);
       return;
     }
-    const updatedPile = { ...piles[selPile], ...form, date: form.date || new Date().toISOString().slice(0, 10) };
-    if (photoUrl) updatedPile.photoUrl = photoUrl;
-    try {
-      await updateDoc(docRef, { [selPile]: updatedPile });
-      closePanel();
-    } catch (error) {
-      alert("ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่");
+
+    // อัพโหลดรูปทีหลัง (ไม่บล็อกการบันทึก)
+    const pendingPhoto = photoFile;
+    const isRem = !!selRemPile;
+    closePanel();
+
+    if (pendingPhoto) {
+      try {
+        const compressed = await compressImage(pendingPhoto, 1200, 0.7);
+        const photoUrl = await uploadPilePhoto(compressed, pileId);
+        // อัพเดท photoUrl หลังอัพรูปสำเร็จ
+        if (isRem) {
+          const freshRem = { ...(remPiles[pileId] || {}), photoUrl };
+          await updateDoc(docRef, { _remPiles: { ...remPiles, [pileId]: freshRem } });
+        } else {
+          await updateDoc(docRef, { [pileId]: { ...(piles[pileId] || {}), photoUrl } });
+        }
+      } catch (err) {
+        console.error("Photo upload error:", err);
+        // ข้อมูลบันทึกแล้ว แค่รูปอัพไม่ได้
+      }
     }
   };
 
