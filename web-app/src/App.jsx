@@ -1,8 +1,13 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { doc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage, geminiModel } from "./firebase";
+import { db, storage } from "./firebase";
 import * as XLSX from "xlsx";
+
+// ── Gemini API key (เก็บใน localStorage) ──
+const GEMINI_KEY_STORAGE = "gemini_api_key";
+const getGeminiApiKey = () => localStorage.getItem(GEMINI_KEY_STORAGE) || "";
+const setGeminiApiKey = (key) => localStorage.setItem(GEMINI_KEY_STORAGE, key.trim());
 
 // ── Image compression + OCR utilities ──
 function compressImage(file, maxWidth = 1200, quality = 0.7) {
@@ -20,11 +25,11 @@ function compressImage(file, maxWidth = 1200, quality = 0.7) {
   });
 }
 
-function fileToBase64(file) {
+function fileToBase64(blob) {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result.split(",")[1]);
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(blob);
   });
 }
 
@@ -35,8 +40,12 @@ async function uploadPilePhoto(blob, pileId) {
 }
 
 async function extractPileDataFromPhoto(file) {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) throw new Error("ยังไม่ได้ตั้งค่า Gemini API Key — กดปุ่ม ⚙️ ที่มุมขวาบนเพื่อใส่ key");
+
   const compressed = await compressImage(file, 1200, 0.8);
   const base64 = await fileToBase64(compressed);
+
   const prompt = `Read the handwritten whiteboard in this construction site photo.
 Extract the following fields. Return ONLY a valid JSON object, no explanation, no markdown.
 
@@ -53,12 +62,27 @@ Expected fields:
 If a field is not visible or unreadable, set its value to null.
 Return ONLY valid JSON.`;
 
-  const result = await geminiModel.generateContent([
-    { inlineData: { data: base64, mimeType: "image/jpeg" } },
-    prompt,
-  ]);
-  const text = result.response.text().trim();
-  // Strip markdown code fence if present
+  const resp = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { inline_data: { mime_type: "image/jpeg", data: base64 } },
+            { text: prompt }
+          ]
+        }]
+      })
+    }
+  );
+  if (!resp.ok) {
+    const errBody = await resp.json().catch(() => ({}));
+    throw new Error(errBody?.error?.message || `HTTP ${resp.status}`);
+  }
+  const data = await resp.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
   const jsonStr = text.replace(/^```json?\s*/i, "").replace(/```\s*$/, "").trim();
   return JSON.parse(jsonStr);
 }
@@ -210,6 +234,8 @@ export default function App() {
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrResult, setOcrResult] = useState(null);
   const scanInputRef = useRef(null);
+  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState("");
 
   // ── ฟังก์ชันหาแถว/คอลัมน์ของเสาเข็ม ──
   const findRowColForPile = (pileId) => {
@@ -818,6 +844,49 @@ export default function App() {
         @keyframes glowPulse{from{box-shadow:0 0 5px 2px #fbbf24;}to{box-shadow:0 0 15px 5px #fbbf24;}}
       `}</style>
 
+      {/* API Key Dialog */}
+      {showApiKeyDialog && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#0d0f18", border: "1px solid #1e2235", borderRadius: 8, padding: 24, width: "100%", maxWidth: 420, fontFamily: "'Sarabun',sans-serif" }}>
+            <div style={{ fontWeight: 700, fontSize: 16, color: "#cdd1e0", marginBottom: 8 }}>🔑 ตั้งค่า Gemini API Key</div>
+            <div style={{ fontSize: 12, color: "#555d7a", marginBottom: 16, lineHeight: 1.7 }}>
+              รับ API Key ฟรีได้ที่{" "}
+              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style={{ color: "#a855f7" }}>
+                aistudio.google.com/apikey
+              </a>
+              <br />Key จะเก็บในเครื่องนี้เท่านั้น (localStorage)
+            </div>
+            <input
+              className="inp"
+              type="password"
+              placeholder="AIzaSy..."
+              value={apiKeyInput}
+              onChange={e => setApiKeyInput(e.target.value)}
+              style={{ width: "100%", marginBottom: 12, fontSize: 13 }}
+              autoFocus
+            />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => {
+                  if (apiKeyInput.trim()) { setGeminiApiKey(apiKeyInput); setShowApiKeyDialog(false); }
+                }}
+                style={{ flex: 1, padding: "10px", borderRadius: 4, border: "1px solid #16703a", background: "#0b2117", color: "#22c55e", cursor: "pointer", fontWeight: 700, fontSize: 14 }}
+              >บันทึก</button>
+              {getGeminiApiKey() && (
+                <button
+                  onClick={() => { setGeminiApiKey(""); setShowApiKeyDialog(false); }}
+                  style={{ padding: "10px 14px", borderRadius: 4, border: "1px solid #8c1c1c", background: "#210b0b", color: "#ef4444", cursor: "pointer", fontSize: 13 }}
+                >ลบ Key</button>
+              )}
+              <button
+                onClick={() => setShowApiKeyDialog(false)}
+                style={{ padding: "10px 14px", borderRadius: 4, border: "1px solid #1e2235", background: "transparent", color: "#555d7a", cursor: "pointer", fontSize: 13 }}
+              >ยกเลิก</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* HEADER */}
       <div style={{ background: "#060810", borderBottom: "1px solid #111420", padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
         <div style={{ width: 28, height: 28, background: "linear-gradient(135deg,#0b2117,#16703a)", borderRadius: 4, display: "grid", placeItems: "center", fontSize: 13 }}>⬛</div>
@@ -843,7 +912,10 @@ export default function App() {
           </button>
           <input ref={scanInputRef} type="file" accept="image/*" capture="environment" hidden onChange={handleScanPhoto} />
           <button
-            onClick={() => scanInputRef.current?.click()}
+            onClick={() => {
+              if (!getGeminiApiKey()) { setApiKeyInput(""); setShowApiKeyDialog(true); return; }
+              scanInputRef.current?.click();
+            }}
             disabled={ocrLoading}
             style={{
               display: "flex", alignItems: "center", gap: 6,
@@ -858,6 +930,11 @@ export default function App() {
           >
             {ocrLoading ? "AI กำลังอ่าน..." : "📷 สแกน"}
           </button>
+          <button
+            onClick={() => { setApiKeyInput(getGeminiApiKey()); setShowApiKeyDialog(true); }}
+            title="ตั้งค่า Gemini API Key"
+            style={{ background: "none", border: "none", color: getGeminiApiKey() ? "#22c55e" : "#ef4444", cursor: "pointer", fontSize: 18, padding: "4px 6px" }}
+          >⚙️</button>
           <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
             <span style={{ fontSize: 14, color: "#22c55e", fontWeight: 600 }}>{stats.pct}%</span>
           </div>
