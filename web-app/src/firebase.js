@@ -1,8 +1,8 @@
 import { initializeApp } from "firebase/app";
 // เปลี่ยนมาใช้คำสั่ง initializeFirestore สำหรับเวอร์ชันใหม่
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
-
-
+import { getStorage } from "firebase/storage";
+import { getAI, getGenerativeModel, GoogleAIBackend } from "firebase/ai";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -20,3 +20,10 @@ const app = initializeApp(firebaseConfig);
 export const db = initializeFirestore(app, {
     localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
 });
+
+// Firebase Storage สำหรับเก็บรูปถ่าย
+export const storage = getStorage(app);
+
+// Firebase AI (Gemini) สำหรับอ่านข้อมูลจากรูป
+const ai = getAI(app, { backend: new GoogleAIBackend() });
+export const geminiModel = getGenerativeModel(ai, { model: "gemini-2.0-flash" });

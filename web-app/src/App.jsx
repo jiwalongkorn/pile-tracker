@@ -1,7 +1,67 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { doc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
-import { db } from "./firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage, geminiModel } from "./firebase";
 import * as XLSX from "xlsx";
+
+// ── Image compression + OCR utilities ──
+function compressImage(file, maxWidth = 1200, quality = 0.7) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxWidth / img.width);
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((blob) => resolve(blob), "image/jpeg", quality);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadPilePhoto(blob, pileId) {
+  const storageRef = ref(storage, `piles/${pileId}/photo.jpg`);
+  await uploadBytes(storageRef, blob);
+  return getDownloadURL(storageRef);
+}
+
+async function extractPileDataFromPhoto(file) {
+  const compressed = await compressImage(file, 1200, 0.8);
+  const base64 = await fileToBase64(compressed);
+  const prompt = `Read the handwritten whiteboard in this construction site photo.
+Extract the following fields. Return ONLY a valid JSON object, no explanation, no markdown.
+
+Expected fields:
+- pileNo: The pile number (number after "Pile No" or "เข็มที่")
+- date: Date in YYYY-MM-DD format (convert Thai Buddhist year: if year is 2 digits like "69" it means BE 2569 = CE 2026, so "21-3-69" → "2026-03-21")
+- startTime: Start time in HH:MM format (from "เริ่มกด")
+- endTime: End time in HH:MM format (from "กดจบ")
+- pileTip: Pile tip depth as string (from "PileTip", e.g. "-16.70")
+- pileTop: Pile top elevation as string (from "PileTop", e.g. "+5.30")
+- pressure: Pressure value as string (from "Pressure", e.g. "110")
+- gridLine: Grid line reference (from "Grid line")
+
+If a field is not visible or unreadable, set its value to null.
+Return ONLY valid JSON.`;
+
+  const result = await geminiModel.generateContent([
+    { inlineData: { data: base64, mimeType: "image/jpeg" } },
+    prompt,
+  ]);
+  const text = result.response.text().trim();
+  // Strip markdown code fence if present
+  const jsonStr = text.replace(/^```json?\s*/i, "").replace(/```\s*$/, "").trim();
+  return JSON.parse(jsonStr);
+}
 
 // ============================================================
 // ข้อมูล GRID คงเดิม (อ้างอิงตามแบบ ST-04 และ RFA-004)
@@ -143,6 +203,13 @@ export default function App() {
   const [remGroups, setRemGroups] = useState({});
   const [remDialog, setRemDialog] = useState(null);
   const [selRemPile, setSelRemPile] = useState(null); // selected remediation pile ID
+
+  // ── Photo + OCR state ──
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrResult, setOcrResult] = useState(null);
+  const scanInputRef = useRef(null);
 
   // ── ฟังก์ชันหาแถว/คอลัมน์ของเสาเข็ม ──
   const findRowColForPile = (pileId) => {
@@ -315,12 +382,110 @@ export default function App() {
     setSelRemPile(null);
     setSearchQ("");
     setRemDialog(null);
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setOcrResult(null);
+  };
+
+  // ── Photo + OCR handlers ──
+  const handlePhotoSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setOcrResult(null);
+    const reader = new FileReader();
+    reader.onload = (ev) => setPhotoPreview(ev.target.result);
+    reader.readAsDataURL(file);
+    e.target.value = ""; // allow re-select same file
+  };
+
+  const handleOcrRead = async () => {
+    if (!photoFile) return;
+    setOcrLoading(true);
+    try {
+      const result = await extractPileDataFromPhoto(photoFile);
+      setOcrResult(result);
+    } catch (err) {
+      console.error("OCR error:", err);
+      alert("ไม่สามารถอ่านข้อมูลจากรูปได้\n\nอาจต้องเปิด Firebase AI (Gemini API) ใน Firebase Console ก่อน\n\nError: " + err.message);
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
+  const applyOcrToForm = () => {
+    if (!ocrResult) return;
+    setForm(f => ({
+      ...f,
+      s: ST.D,
+      date: ocrResult.date || f.date,
+      startTime: ocrResult.startTime || f.startTime,
+      endTime: ocrResult.endTime || f.endTime,
+      pileTip: ocrResult.pileTip || f.pileTip,
+      pileTop: ocrResult.pileTop || f.pileTop,
+      pressure: ocrResult.pressure || f.pressure,
+    }));
+    setOcrResult(null);
+  };
+
+  // Scan-first workflow: ถ่ายรูปก่อน → AI อ่าน Pile No → เปิด form
+  const handleScanPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setOcrLoading(true);
+    try {
+      const result = await extractPileDataFromPhoto(file);
+      const pileNo = result.pileNo ? parseInt(result.pileNo) : null;
+      if (pileNo && piles[pileNo]) {
+        const foundCell = findCellByPileId(String(pileNo));
+        if (foundCell) setSelCell(foundCell);
+        openPile(pileNo);
+        setPhotoFile(file);
+        const reader = new FileReader();
+        reader.onload = (ev) => setPhotoPreview(ev.target.result);
+        reader.readAsDataURL(file);
+        // Apply OCR data to form
+        setForm(f => ({
+          ...f,
+          s: ST.D,
+          date: result.date || f.date,
+          startTime: result.startTime || f.startTime,
+          endTime: result.endTime || f.endTime,
+          pileTip: result.pileTip || f.pileTip,
+          pileTop: result.pileTop || f.pileTop,
+          pressure: result.pressure || f.pressure,
+        }));
+      } else {
+        alert("ไม่พบเสาเข็มหมายเลข " + (result.pileNo || "?") + " ในระบบ\nกรุณาเลือกเข็มเองแล้วถ่ายรูปอีกครั้ง");
+      }
+    } catch (err) {
+      console.error("Scan error:", err);
+      alert("ไม่สามารถอ่านข้อมูลจากรูปได้\n\nError: " + err.message);
+    } finally {
+      setOcrLoading(false);
+    }
   };
 
   const savePile = async () => {
+    const pileId = selRemPile || selPile;
+    if (!pileId) return;
+
+    // อัพโหลดรูปถ้ามี
+    let photoUrl = "";
+    if (photoFile) {
+      try {
+        const compressed = await compressImage(photoFile, 1200, 0.7);
+        photoUrl = await uploadPilePhoto(compressed, pileId);
+      } catch (err) {
+        console.error("Photo upload error:", err);
+        // ยังบันทึกข้อมูลต่อได้แม้อัพรูปล้มเหลว
+      }
+    }
+
     if (selRemPile) {
-      // บันทึกเข็มแก้ไข
       const updatedRp = { ...remPiles[selRemPile], ...form, date: form.date || new Date().toISOString().slice(0, 10) };
+      if (photoUrl) updatedRp.photoUrl = photoUrl;
       try {
         await updateDoc(docRef, { _remPiles: { ...remPiles, [selRemPile]: updatedRp } });
         closePanel();
@@ -329,8 +494,8 @@ export default function App() {
       }
       return;
     }
-    if (!selPile) return;
     const updatedPile = { ...piles[selPile], ...form, date: form.date || new Date().toISOString().slice(0, 10) };
+    if (photoUrl) updatedPile.photoUrl = photoUrl;
     try {
       await updateDoc(docRef, { [selPile]: updatedPile });
       closePanel();
@@ -676,6 +841,23 @@ export default function App() {
           >
             📥 Export Excel
           </button>
+          <input ref={scanInputRef} type="file" accept="image/*" capture="environment" hidden onChange={handleScanPhoto} />
+          <button
+            onClick={() => scanInputRef.current?.click()}
+            disabled={ocrLoading}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "7px 14px", borderRadius: 4,
+              border: "1px solid #1e2235", background: ocrLoading ? "#141825" : "#0d0f18",
+              color: ocrLoading ? "#555d7a" : "#a855f7", cursor: ocrLoading ? "wait" : "pointer",
+              fontFamily: "'Sarabun',sans-serif", fontSize: 13, fontWeight: 600,
+              transition: "all .15s",
+            }}
+            onMouseEnter={e => { if (!ocrLoading) { e.currentTarget.style.background = "#141825"; e.currentTarget.style.borderColor = "#7c3aed"; }}}
+            onMouseLeave={e => { e.currentTarget.style.background = ocrLoading ? "#141825" : "#0d0f18"; e.currentTarget.style.borderColor = "#1e2235"; }}
+          >
+            {ocrLoading ? "AI กำลังอ่าน..." : "📷 สแกน"}
+          </button>
           <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
             <span style={{ fontSize: 14, color: "#22c55e", fontWeight: 600 }}>{stats.pct}%</span>
           </div>
@@ -925,6 +1107,63 @@ export default function App() {
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {/* ── Photo Upload + OCR ── */}
+                <div>
+                  <input id="pile-photo-input" type="file" accept="image/*" capture="environment" hidden onChange={handlePhotoSelect} />
+                  {!photoPreview ? (
+                    <label htmlFor="pile-photo-input" style={{
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                      padding: "12px", borderRadius: 4, cursor: "pointer",
+                      fontFamily: "'Sarabun',sans-serif", fontWeight: 600, fontSize: 14,
+                      background: "#0d0f18", border: "1px dashed #333c5a", color: "#8a94b5",
+                      transition: "all .15s",
+                    }}>
+                      📷 ถ่ายรูป / เลือกรูป
+                    </label>
+                  ) : (
+                    <div style={{ position: "relative" }}>
+                      <img src={photoPreview} alt="preview" style={{ width: "100%", maxHeight: 200, objectFit: "contain", borderRadius: 4, border: "1px solid #1e2235" }} />
+                      <button onClick={() => { setPhotoFile(null); setPhotoPreview(null); setOcrResult(null); }} style={{ position: "absolute", top: 4, right: 4, background: "rgba(0,0,0,0.7)", border: "none", color: "#ef4444", cursor: "pointer", borderRadius: "50%", width: 24, height: 24, fontSize: 14, display: "grid", placeItems: "center" }}>✕</button>
+                      {!ocrResult && (
+                        <button onClick={handleOcrRead} disabled={ocrLoading} style={{
+                          width: "100%", marginTop: 8, padding: "10px", borderRadius: 4, cursor: ocrLoading ? "wait" : "pointer",
+                          fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 13,
+                          background: ocrLoading ? "#141825" : "#1a0f2e", border: `1px solid ${ocrLoading ? "#333c5a" : "#7c3aed"}`,
+                          color: ocrLoading ? "#555d7a" : "#a855f7",
+                        }}>
+                          {ocrLoading ? (
+                            <span style={{ animation: "pulse 1s infinite" }}>AI กำลังอ่านข้อมูล...</span>
+                          ) : (
+                            "🤖 อ่านข้อมูลจากรูป"
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {ocrResult && (
+                    <div style={{ marginTop: 8, background: "#0b2117", borderRadius: 4, padding: 12, border: "1px solid #16703a", fontSize: 12, fontFamily: "'Sarabun',sans-serif" }}>
+                      <div style={{ color: "#22c55e", fontWeight: 700, marginBottom: 8 }}>AI อ่านข้อมูลได้:</div>
+                      <div style={{ color: "#8a94b5", lineHeight: 2 }}>
+                        {ocrResult.pileNo && <div>Pile No: <span style={{ color: "#fbbf24", fontWeight: 700 }}>#{ocrResult.pileNo}</span></div>}
+                        {ocrResult.date && <div>วันที่: <span style={{ color: "#cdd1e0" }}>{ocrResult.date}</span></div>}
+                        {ocrResult.startTime && <div>เริ่มกด: <span style={{ color: "#cdd1e0" }}>{ocrResult.startTime}</span></div>}
+                        {ocrResult.endTime && <div>กดจบ: <span style={{ color: "#cdd1e0" }}>{ocrResult.endTime}</span></div>}
+                        {ocrResult.pileTip && <div>PileTip: <span style={{ color: "#cdd1e0" }}>{ocrResult.pileTip}</span></div>}
+                        {ocrResult.pileTop && <div>PileTop: <span style={{ color: "#cdd1e0" }}>{ocrResult.pileTop}</span></div>}
+                        {ocrResult.pressure && <div>Pressure: <span style={{ color: "#cdd1e0" }}>{ocrResult.pressure}</span></div>}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                        <button onClick={applyOcrToForm} style={{ flex: 1, padding: "8px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 13, background: "#0b2117", border: "1px solid #16703a", color: "#22c55e" }}>
+                          ✓ ใช้ข้อมูลนี้
+                        </button>
+                        <button onClick={() => setOcrResult(null)} style={{ padding: "8px 12px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 12, background: "transparent", border: "1px solid #1e2235", color: "#555d7a" }}>
+                          ยกเลิก
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>สถานะเสาเข็ม</div>
                   <div style={{ display: "flex", gap: 6 }}>
@@ -1028,6 +1267,11 @@ export default function App() {
                       <div>⏫ Top: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{piles[selPile].pileTop || "-"}</span> ม.</div>
                       <div>🗜️ Press: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{piles[selPile].pressure || "-"}</span></div>
                     </div>
+                    {piles[selPile].photoUrl && (
+                      <a href={piles[selPile].photoUrl} target="_blank" rel="noopener noreferrer" style={{ display: "block", marginTop: 8 }}>
+                        <img src={piles[selPile].photoUrl} alt="pile photo" style={{ width: "100%", maxHeight: 150, objectFit: "contain", borderRadius: 4, border: "1px solid #1e2235" }} />
+                      </a>
+                    )}
                   </div>
                 )}
 
@@ -1042,6 +1286,11 @@ export default function App() {
                       <div>⏫ Top: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{remPiles[selRemPile].pileTop || "-"}</span> ม.</div>
                       <div>🗜️ Press: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{remPiles[selRemPile].pressure || "-"}</span></div>
                     </div>
+                    {remPiles[selRemPile].photoUrl && (
+                      <a href={remPiles[selRemPile].photoUrl} target="_blank" rel="noopener noreferrer" style={{ display: "block", marginTop: 8 }}>
+                        <img src={remPiles[selRemPile].photoUrl} alt="pile photo" style={{ width: "100%", maxHeight: 150, objectFit: "contain", borderRadius: 4, border: "1px solid #1e2235" }} />
+                      </a>
+                    )}
                   </div>
                 )}
               </div>
