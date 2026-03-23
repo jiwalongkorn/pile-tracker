@@ -141,7 +141,6 @@ export default function App() {
   // ── Remediation state ──
   const [remPiles, setRemPiles] = useState({});
   const [remGroups, setRemGroups] = useState({});
-  const [showRemLayer, setShowRemLayer] = useState(true);
   const [remDialog, setRemDialog] = useState(null);
   const [selRemPile, setSelRemPile] = useState(null); // selected remediation pile ID
 
@@ -518,7 +517,7 @@ export default function App() {
     const pad = Math.round(12 * zoom);
 
     // หา remGroups สำหรับ cell นี้
-    const cellRemGroups = showRemLayer ? findRemGroupsForCell(remGroups, pileIds) : [];
+    const cellRemGroups = findRemGroupsForCell(remGroups, pileIds);
     const hasRem = cellRemGroups.length > 0;
 
     // คำนวณขนาด cell โดยรวมเข็มแก้ไข
@@ -656,23 +655,6 @@ export default function App() {
           <div style={{ fontSize: 9, color: "#1e2235", letterSpacing: 3 }}>GRID A–M × 1–21 · F1/F2 · 1,111 PILES</div>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
-          {/* Toggle เข็มแก้ไข */}
-          {remStats.total > 0 && (
-            <button
-              onClick={() => setShowRemLayer(v => !v)}
-              style={{
-                display: "flex", alignItems: "center", gap: 6,
-                padding: "7px 14px", borderRadius: 4,
-                border: `1px solid ${showRemLayer ? REM_DOT_BD : "#1e2235"}`,
-                background: showRemLayer ? "#1a0f2e" : "#0d0f18",
-                color: showRemLayer ? REM_DOT_COLOR : "#555d7a",
-                cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 12, fontWeight: 600,
-              }}
-            >
-              <div style={{ width: 8, height: 8, background: REM_DOT_COLOR, transform: "rotate(45deg)", opacity: showRemLayer ? 1 : 0.3 }} />
-              แก้ไข {remStats.done}/{remStats.total}
-            </button>
-          )}
           <button
             onClick={exportToExcel}
             style={{
