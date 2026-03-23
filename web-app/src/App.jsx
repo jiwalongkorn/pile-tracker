@@ -73,6 +73,20 @@ const ISSUE_COLORS = {
 const ISSUE_COLOR_KEYS = Object.keys(ISSUE_COLORS);
 const DEFAULT_ISSUE_COLOR = "red";
 
+// ── ตรวจจับประเภทฐานราก ──
+function getFoundationType(pileIds, rowType) {
+  if (pileIds.length === 2) return "F2";
+  if (rowType === "inter") return "F-Drop";
+  return "F1";
+}
+function getRemSpacing(remCase) {
+  return remCase === "F-Drop" ? 1.20 : 1.00;
+}
+
+// ── สีเข็มแก้ไข ──
+const REM_DOT_COLOR = "#a855f7";
+const REM_DOT_BD = "#7c3aed";
+
 // ข้อมูลเริ่มต้นให้ตรงกับหน้างานจริง (เอาช่องระยะส่งออกแล้ว)
 function initPiles() {
   const m = {};
@@ -97,6 +111,22 @@ function findCellByPileId(targetId) {
   return null;
 }
 
+// ── หา remGroup จาก pileId ──
+function findRemGroupForPile(remGroups, pileId) {
+  const key = `RG-${pileId}`;
+  return remGroups[key] || null;
+}
+
+// ── หา remGroup จาก cell (ตรวจทุก pile ใน cell) ──
+function findRemGroupsForCell(remGroups, pileIds) {
+  const groups = [];
+  for (const pid of pileIds) {
+    const key = `RG-${pid}`;
+    if (remGroups[key]) groups.push(remGroups[key]);
+  }
+  return groups;
+}
+
 export default function App() {
   const [piles, setPiles] = useState(initPiles());
   const [selPile, setSelPile] = useState(null);
@@ -107,6 +137,13 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [searchQ, setSearchQ] = useState("");
   const [cellIssueMenu, setCellIssueMenu] = useState(false);
+
+  // ── Remediation state ──
+  const [remPiles, setRemPiles] = useState({});
+  const [remGroups, setRemGroups] = useState({});
+  const [showRemLayer, setShowRemLayer] = useState(true);
+  const [remDialog, setRemDialog] = useState(null);
+  const [selRemPile, setSelRemPile] = useState(null); // selected remediation pile ID
 
   // ── ฟังก์ชันหาแถว/คอลัมน์ของเสาเข็ม ──
   const findRowColForPile = (pileId) => {
@@ -151,6 +188,37 @@ export default function App() {
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Pile Data");
+
+    // ── Sheet เสาเข็มแก้ไข ──
+    const remEntries = Object.values(remPiles);
+    if (remEntries.length > 0) {
+      const remRows = remEntries.map(rp => {
+        const group = Object.values(remGroups).find(g => g.remPileIds.includes(rp.id));
+        return {
+          "เบอร์เสาเข็ม": rp.id,
+          "เข็มเดิมที่เฟล": rp.parentPileId,
+          "ประเภทฐานราก": rp.remCase,
+          "ทิศทาง": group?.direction === "horizontal" ? "ซ้าย-ขวา" : "บน-ล่าง",
+          "ระยะห่าง (ม.)": getRemSpacing(rp.remCase),
+          "สถานะ": statusMap[rp.s] || rp.s,
+          "วันที่": rp.date || "",
+          "เวลาเริ่ม": rp.startTime || "",
+          "เวลาจบ": rp.endTime || "",
+          "Pile Tip (ม.)": rp.pileTip || "",
+          "Pile Top (ม.)": rp.pileTop || "",
+          "Pressure": rp.pressure || "",
+          "หมายเหตุ": rp.note || "",
+        };
+      });
+      const ws2 = XLSX.utils.json_to_sheet(remRows);
+      ws2["!cols"] = [
+        { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 14 },
+        { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 14 },
+        { wch: 14 }, { wch: 12 }, { wch: 30 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws2, "เสาเข็มแก้ไข");
+    }
+
     const today = new Date().toISOString().slice(0, 10);
     XLSX.writeFile(wb, `PileTracker_${today}.xlsx`);
   };
@@ -160,7 +228,11 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
-        setPiles(prev => ({ ...prev, ...docSnap.data() }));
+        const data = docSnap.data();
+        const { _remPiles, _remGroups, ...pileData } = data;
+        setPiles(prev => ({ ...prev, ...pileData }));
+        if (_remPiles) setRemPiles(_remPiles);
+        if (_remGroups) setRemGroups(_remGroups);
       } else {
         setDoc(docRef, initPiles());
       }
@@ -176,9 +248,17 @@ export default function App() {
     return { done, issue, pending: TOTAL - done - issue, pct: ((done / TOTAL) * 100).toFixed(1) };
   }, [piles]);
 
+  const remStats = useMemo(() => {
+    const vals = Object.values(remPiles);
+    const total = vals.length;
+    const done = vals.filter(p => p.s === ST.D).length;
+    return { total, done, pending: total - done };
+  }, [remPiles]);
+
   const openPile = (id) => {
     const p = piles[id];
     setSelPile(id);
+    setSelRemPile(null);
     setSelCell(null);
     setForm({
       s: p.s,
@@ -193,11 +273,30 @@ export default function App() {
     });
   };
 
+  const openRemPile = (remId) => {
+    const rp = remPiles[remId];
+    if (!rp) return;
+    setSelRemPile(remId);
+    setSelPile(null);
+    setSelCell(null);
+    setForm({
+      s: rp.s || ST.P,
+      issueColor: rp.issueColor || "",
+      date: rp.date || "",
+      startTime: rp.startTime || "",
+      endTime: rp.endTime || "",
+      pileTip: rp.pileTip || "",
+      pileTop: rp.pileTop || "",
+      pressure: rp.pressure || "",
+      note: rp.note || ""
+    });
+  };
+
   const handleSearch = (e) => {
     const val = e.target.value;
     setSearchQ(val);
     if (!val) {
-      setSelCell(null); setSelPile(null); return;
+      setSelCell(null); setSelPile(null); setSelRemPile(null); return;
     }
     const foundCell = findCellByPileId(val);
     if (foundCell) {
@@ -208,10 +307,23 @@ export default function App() {
   const closePanel = () => {
     setSelCell(null);
     setSelPile(null);
+    setSelRemPile(null);
     setSearchQ("");
+    setRemDialog(null);
   };
 
   const savePile = async () => {
+    if (selRemPile) {
+      // บันทึกเข็มแก้ไข
+      const updatedRp = { ...remPiles[selRemPile], ...form, date: form.date || new Date().toISOString().slice(0, 10) };
+      try {
+        await updateDoc(docRef, { _remPiles: { ...remPiles, [selRemPile]: updatedRp } });
+        closePanel();
+      } catch (error) {
+        alert("ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่");
+      }
+      return;
+    }
     if (!selPile) return;
     const updatedPile = { ...piles[selPile], ...form, date: form.date || new Date().toISOString().slice(0, 10) };
     try {
@@ -234,6 +346,83 @@ export default function App() {
     } catch (error) { }
   };
 
+  // ── เพิ่มเสาเข็มแก้ไข ──
+  const applyRemediation = async () => {
+    if (!remDialog) return;
+    const { pileId, remCase, direction, id1, id2 } = remDialog;
+    const trimId1 = String(id1).trim();
+    const trimId2 = String(id2).trim();
+
+    if (!trimId1 || !trimId2) { alert("กรุณาระบุ Pile ID ทั้ง 2 ต้น"); return; }
+    if (trimId1 === trimId2) { alert("Pile ID ทั้ง 2 ต้นต้องไม่ซ้ำกัน"); return; }
+
+    // validate ไม่ซ้ำ
+    const existingIds = new Set([
+      ...Array.from({ length: TOTAL }, (_, i) => String(i + 1)),
+      ...Object.keys(remPiles)
+    ]);
+    if (existingIds.has(trimId1)) { alert(`Pile ID "${trimId1}" ซ้ำกับเข็มที่มีอยู่แล้ว`); return; }
+    if (existingIds.has(trimId2)) { alert(`Pile ID "${trimId2}" ซ้ำกับเข็มที่มีอยู่แล้ว`); return; }
+
+    const cell = findCellByPileId(pileId);
+    if (!cell) return;
+
+    const newRemPiles = {
+      ...remPiles,
+      [trimId1]: {
+        id: trimId1, s: ST.P, parentPileId: pileId, remCase,
+        issueColor: "", date: "", startTime: "", endTime: "",
+        pileTip: "", pileTop: "", pressure: "", note: ""
+      },
+      [trimId2]: {
+        id: trimId2, s: ST.P, parentPileId: pileId, remCase,
+        issueColor: "", date: "", startTime: "", endTime: "",
+        pileTip: "", pileTop: "", pressure: "", note: ""
+      },
+    };
+
+    const groupKey = `RG-${pileId}`;
+    const newRemGroups = {
+      ...remGroups,
+      [groupKey]: {
+        parentPileId: pileId,
+        remCase,
+        direction,
+        spacing: getRemSpacing(remCase),
+        rowId: cell.rowId,
+        colIdx: cell.colIdx,
+        remPileIds: [trimId1, trimId2],
+        createdAt: new Date().toISOString().slice(0, 10),
+      },
+    };
+
+    try {
+      await updateDoc(docRef, { _remPiles: newRemPiles, _remGroups: newRemGroups });
+      setRemDialog(null);
+    } catch (error) {
+      alert("ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่");
+    }
+  };
+
+  // ── ลบเสาเข็มแก้ไข ──
+  const removeRemediation = async (pileId) => {
+    const groupKey = `RG-${pileId}`;
+    const group = remGroups[groupKey];
+    if (!group) return;
+    if (!confirm("ต้องการลบเสาเข็มแก้ไขของเข็ม #" + pileId + " หรือไม่?")) return;
+
+    const newRemPiles = { ...remPiles };
+    group.remPileIds.forEach(rid => delete newRemPiles[rid]);
+    const newRemGroups = { ...remGroups };
+    delete newRemGroups[groupKey];
+
+    try {
+      await updateDoc(docRef, { _remPiles: newRemPiles, _remGroups: newRemGroups });
+    } catch (error) {
+      alert("ไม่สามารถลบได้ กรุณาลองใหม่");
+    }
+  };
+
   const f2IsHorizontal = (ci, rowType) => {
     if (ci === 0 || ci === 40) return true;
     if ((ci === 16 || ci === 24) && rowType === "mid") return true;
@@ -242,10 +431,11 @@ export default function App() {
 
   const Dot = ({ id }) => {
     const p = piles[id];
-    // filter: "all", "p", "d", "x", "x_red", "x_orange", "x_yellow", "x_blue"
     let dim = false;
     if (filter !== "all") {
-      if (filter.startsWith("x_")) {
+      if (filter === "rem") {
+        dim = true; // dim ทุก dot ปกติ ตอนกรอง "แก้ไข"
+      } else if (filter.startsWith("x_")) {
         const fc = filter.replace("x_", "");
         dim = !(p.s === ST.X && (p.issueColor || DEFAULT_ISSUE_COLOR) === fc);
       } else {
@@ -256,7 +446,6 @@ export default function App() {
     const isSearched = searchQ && String(id) === searchQ;
     const sz = Math.round(12 * zoom);
 
-    // ใช้สีตาม issueColor ถ้าสถานะ = มีปัญหา
     let dotColor = ST_DOT[p.s];
     let borderColor = p.s === ST.D ? "#16703a" : p.s === ST.X ? "#8c1c1c" : "#272c42";
     if (p.s === ST.X) {
@@ -286,6 +475,37 @@ export default function App() {
     );
   };
 
+  // ── RemDot: เข็มแก้ไข (diamond) ──
+  const RemDot = ({ remId }) => {
+    const rp = remPiles[remId];
+    if (!rp) return null;
+    const sz = Math.round(10 * zoom);
+    const isSel = selRemPile === remId;
+    const color = rp.s === ST.D ? "#22c55e" : rp.s === ST.X ? "#ef4444" : REM_DOT_COLOR;
+    const bdColor = rp.s === ST.D ? "#16703a" : rp.s === ST.X ? "#8c1c1c" : REM_DOT_BD;
+    let dim = false;
+    if (filter !== "all" && filter !== "rem") dim = true;
+
+    return (
+      <div
+        title={`แก้ไข #${remId} (เข็มเดิม #${rp.parentPileId})`}
+        onClick={e => { e.stopPropagation(); openRemPile(remId); }}
+        style={{
+          width: sz, height: sz, flexShrink: 0, cursor: "pointer",
+          background: color,
+          border: `1px solid ${isSel ? "#fbbf24" : bdColor}`,
+          boxShadow: isSel ? "0 0 0 2px #fbbf24" : "none",
+          transform: "rotate(45deg)",
+          opacity: dim ? 0.15 : 1,
+          position: "relative", zIndex: isSel ? 10 : 2,
+          transition: "transform .08s",
+        }}
+        onMouseEnter={e => { e.currentTarget.style.transform = "rotate(45deg) scale(1.7)"; }}
+        onMouseLeave={e => { e.currentTarget.style.transform = "rotate(45deg) scale(1)"; }}
+      />
+    );
+  };
+
   const Cell = ({ rowId, colIdx, pileIds, rowType }) => {
     const isF2 = pileIds.length === 2;
     const horiz = f2IsHorizontal(colIdx, rowType);
@@ -297,8 +517,36 @@ export default function App() {
     const gap = Math.round(4 * zoom);
     const pad = Math.round(12 * zoom);
 
-    const cellW = isF2 ? (horiz ? dotSz * 2 + gap + pad * 2 : dotSz + pad * 2) : dotSz + pad * 2;
-    const cellH = isF2 ? (horiz ? dotSz + pad * 2 : dotSz * 2 + gap + pad * 2) : dotSz + pad * 2;
+    // หา remGroups สำหรับ cell นี้
+    const cellRemGroups = showRemLayer ? findRemGroupsForCell(remGroups, pileIds) : [];
+    const hasRem = cellRemGroups.length > 0;
+
+    // คำนวณขนาด cell โดยรวมเข็มแก้ไข
+    let cellW, cellH;
+    if (hasRem) {
+      const remDotSz = Math.round(10 * zoom);
+      const remGap = Math.round(4 * zoom);
+      // ดูทิศทางของ remGroup แรก (cell มักมีแค่ 1 group)
+      const dir = cellRemGroups[0]?.direction || "horizontal";
+      if (dir === "horizontal") {
+        // เข็มแก้ไขอยู่ซ้าย-ขวา
+        const innerW = isF2 ? (horiz ? dotSz * 2 + gap : dotSz) : dotSz;
+        cellW = remDotSz + remGap + innerW + remGap + remDotSz + pad * 2;
+        cellH = isF2 ? (horiz ? dotSz + pad * 2 : dotSz * 2 + gap + pad * 2) : dotSz + pad * 2;
+      } else {
+        // เข็มแก้ไขอยู่บน-ล่าง
+        cellW = isF2 ? (horiz ? dotSz * 2 + gap + pad * 2 : dotSz + pad * 2) : dotSz + pad * 2;
+        const innerH = isF2 ? (!horiz ? dotSz * 2 + gap : dotSz) : dotSz;
+        cellH = remDotSz + remGap + innerH + remGap + remDotSz + pad * 2;
+      }
+    } else {
+      cellW = isF2 ? (horiz ? dotSz * 2 + gap + pad * 2 : dotSz + pad * 2) : dotSz + pad * 2;
+      cellH = isF2 ? (horiz ? dotSz + pad * 2 : dotSz * 2 + gap + pad * 2) : dotSz + pad * 2;
+    }
+
+    // สร้าง remDots สำหรับ render
+    const remDotIds = cellRemGroups.flatMap(g => g.remPileIds || []);
+    const remDirection = cellRemGroups[0]?.direction || "horizontal";
 
     return (
       <div
@@ -316,10 +564,20 @@ export default function App() {
         <div style={{ position: "absolute", top: 0, bottom: 0, left: "50%", width: 0, borderLeft: isMainColumn ? "1px solid #2a3045" : "1px dashed #141825", zIndex: 0 }} />
 
         <div style={{
-          display: "flex", flexDirection: isF2 && !horiz ? "column" : "row", gap: isF2 ? gap : 0,
+          display: "flex",
+          flexDirection: hasRem ? (remDirection === "horizontal" ? "row" : "column") : (isF2 && !horiz ? "column" : "row"),
+          gap: hasRem ? Math.round(4 * zoom) : (isF2 ? gap : 0),
+          alignItems: "center",
           background: "#080a10", padding: 3, borderRadius: 10, zIndex: 1
         }}>
-          {pileIds.map(id => <Dot key={id} id={id} />)}
+          {hasRem && remDotIds[0] && <RemDot remId={remDotIds[0]} />}
+          <div style={{
+            display: "flex", flexDirection: isF2 && !horiz ? "column" : "row", gap: isF2 ? gap : 0,
+            alignItems: "center",
+          }}>
+            {pileIds.map(id => <Dot key={id} id={id} />)}
+          </div>
+          {hasRem && remDotIds[1] && <RemDot remId={remDotIds[1]} />}
         </div>
       </div>
     );
@@ -337,7 +595,22 @@ export default function App() {
     );
   }
 
-  const isPanelOpen = selCell || selPile;
+  const isPanelOpen = selCell || selPile || selRemPile || remDialog;
+
+  // ── เปิด remediation dialog ──
+  const openRemDialog = (pileId) => {
+    const cell = findCellByPileId(pileId);
+    if (!cell) return;
+    const rowMeta = ROWS_META.find(r => r.id === cell.rowId);
+    const detectedType = getFoundationType(cell.pileIds, rowMeta?.type);
+    setRemDialog({
+      pileId,
+      remCase: detectedType,
+      direction: "horizontal",
+      id1: "",
+      id2: "",
+    });
+  };
 
   return (
     <div style={{ fontFamily: "'IBM Plex Mono', monospace", height: "100vh", background: "#080a10", color: "#cdd1e0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -352,13 +625,13 @@ export default function App() {
         .pill:hover{color:#cdd1e0}
         .inp{background:#080a10;border:1px solid #1e2235;border-radius:3px;color:#cdd1e0;padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:16px;width:100%;outline:none}
         .inp:focus{border-color:#16703a}
-        
+
         .main-content { flex: 1; display: flex; flex-direction: row; overflow: hidden; position: relative; }
         .controls-bar { border-bottom: 1px solid #111420; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; flex-wrap: wrap; justify-content: space-between; }
         .backdrop { display: none; }
         .side-panel { width: 340px; border-left: 1px solid #111420; background: #060810; display: flex; flex-direction: column; flex-shrink: 0; z-index: 10; }
         .mobile-drag-handle { display: none; }
-        
+
         @media (max-width: 768px) {
           .controls-bar { flex-direction: column; align-items: stretch; gap: 12px; }
           .stat-box { flex: 1; text-align: center; }
@@ -383,6 +656,23 @@ export default function App() {
           <div style={{ fontSize: 9, color: "#1e2235", letterSpacing: 3 }}>GRID A–M × 1–21 · F1/F2 · 1,111 PILES</div>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Toggle เข็มแก้ไข */}
+          {remStats.total > 0 && (
+            <button
+              onClick={() => setShowRemLayer(v => !v)}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "7px 14px", borderRadius: 4,
+                border: `1px solid ${showRemLayer ? REM_DOT_BD : "#1e2235"}`,
+                background: showRemLayer ? "#1a0f2e" : "#0d0f18",
+                color: showRemLayer ? REM_DOT_COLOR : "#555d7a",
+                cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 12, fontWeight: 600,
+              }}
+            >
+              <div style={{ width: 8, height: 8, background: REM_DOT_COLOR, transform: "rotate(45deg)", opacity: showRemLayer ? 1 : 0.3 }} />
+              แก้ไข {remStats.done}/{remStats.total}
+            </button>
+          )}
           <button
             onClick={exportToExcel}
             style={{
@@ -410,7 +700,13 @@ export default function App() {
 
       <div className="controls-bar">
         <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", flexWrap: "wrap" }}>
-          {[{ l: "ทั้งหมด", v: TOTAL, c: "#cdd1e0" }, { l: "กดแล้ว", v: stats.done, c: "#22c55e" }, { l: "ยังไม่กด", v: stats.pending, c: "#333c5a" }, { l: "มีปัญหา", v: stats.issue, c: "#ef4444" }].map(({ l, v, c }) => (
+          {[
+            { l: "ทั้งหมด", v: TOTAL, c: "#cdd1e0" },
+            { l: "กดแล้ว", v: stats.done, c: "#22c55e" },
+            { l: "ยังไม่กด", v: stats.pending, c: "#333c5a" },
+            { l: "มีปัญหา", v: stats.issue, c: "#ef4444" },
+            ...(remStats.total > 0 ? [{ l: "แก้ไข", v: remStats.total, c: REM_DOT_COLOR }] : []),
+          ].map(({ l, v, c }) => (
             <div key={l} className="stat-box" style={{ background: "#0d0f18", border: "1px solid #111420", borderRadius: 4, padding: "6px 14px", flexGrow: 1 }}>
               <div style={{ fontSize: 9, color: "#252c42", fontFamily: "'Sarabun',sans-serif" }}>{l}</div>
               <div style={{ fontSize: 18, fontWeight: 600, color: c }}>{v.toLocaleString()}</div>
@@ -490,7 +786,80 @@ export default function App() {
         <div className={`side-panel ${isPanelOpen ? 'open' : ''}`}>
           <div className="mobile-drag-handle" onClick={closePanel}></div>
 
-          {selCell && !selPile && (
+          {/* ── Remediation Dialog ── */}
+          {remDialog && (
+            <div style={{ padding: 16, flex: 1, overflow: "auto", animation: "slideIn .15s ease" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontSize: 10, color: "#1e2235", letterSpacing: 2 }}>เพิ่มเสาเข็มแก้ไข</div>
+                  <div style={{ fontFamily: "'Sarabun',sans-serif", fontSize: 20, fontWeight: 700, color: REM_DOT_COLOR }}>เข็มเดิม #{remDialog.pileId}</div>
+                </div>
+                <button onClick={() => setRemDialog(null)} style={{ background: "none", border: "none", color: "#333c5a", cursor: "pointer", fontSize: 24, padding: "0 5px" }}>✕</button>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {/* ประเภทฐานราก */}
+                <div>
+                  <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>ประเภทฐานราก</div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {["F1", "F2", "F-Drop"].map(t => (
+                      <button key={t} onClick={() => setRemDialog(d => ({ ...d, remCase: t }))}
+                        style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: remDialog.remCase === t ? 700 : 400, background: remDialog.remCase === t ? "#1a0f2e" : "transparent", border: `1px solid ${remDialog.remCase === t ? REM_DOT_BD : "#1e2235"}`, color: remDialog.remCase === t ? REM_DOT_COLOR : "#555d7a" }}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ทิศทาง */}
+                <div>
+                  <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>ทิศทางวางเข็มแก้ไข</div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {[{ v: "horizontal", l: "◇ ● ◇ ซ้าย-ขวา" }, { v: "vertical", l: "◇ ● ◇ บน-ล่าง" }].map(({ v, l }) => (
+                      <button key={v} onClick={() => setRemDialog(d => ({ ...d, direction: v }))}
+                        style={{ flex: 1, padding: "10px 4px", fontSize: 12, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: remDialog.direction === v ? 700 : 400, background: remDialog.direction === v ? "#1a0f2e" : "transparent", border: `1px solid ${remDialog.direction === v ? REM_DOT_BD : "#1e2235"}`, color: remDialog.direction === v ? REM_DOT_COLOR : "#555d7a" }}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ระยะห่าง */}
+                <div style={{ background: "#0d0f18", borderRadius: 4, padding: 10, fontSize: 13, color: "#8a94b5", border: "1px solid #111420", fontFamily: "'Sarabun',sans-serif" }}>
+                  ระยะห่าง: <span style={{ color: REM_DOT_COLOR, fontWeight: 700 }}>{getRemSpacing(remDialog.remCase).toFixed(2)} ม.</span> จากแนวเดิม
+                </div>
+
+                {/* Pile ID inputs */}
+                <div>
+                  <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>Pile ID เสาเข็มแก้ไข (พิมพ์เอง)</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: "#555d7a", marginBottom: 4, fontFamily: "'Sarabun',sans-serif" }}>ต้นที่ 1 ({remDialog.direction === "horizontal" ? "ซ้าย" : "บน"})</div>
+                      <input className="inp" type="text" placeholder="เช่น 1112" value={remDialog.id1} onChange={e => setRemDialog(d => ({ ...d, id1: e.target.value }))} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, color: "#555d7a", marginBottom: 4, fontFamily: "'Sarabun',sans-serif" }}>ต้นที่ 2 ({remDialog.direction === "horizontal" ? "ขวา" : "ล่าง"})</div>
+                      <input className="inp" type="text" placeholder="เช่น 1113" value={remDialog.id2} onChange={e => setRemDialog(d => ({ ...d, id2: e.target.value }))} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* สรุป */}
+                <div style={{ background: "#1a0f2e", borderRadius: 4, padding: 12, fontSize: 13, border: `1px solid ${REM_DOT_BD}`, fontFamily: "'Sarabun',sans-serif", color: "#cdd1e0" }}>
+                  จะเพิ่มเสาเข็มแก้ไข <span style={{ color: REM_DOT_COLOR, fontWeight: 700 }}>2 ต้น</span> ให้เข็ม #{remDialog.pileId}
+                  <br />ประเภท: {remDialog.remCase} · ทิศทาง: {remDialog.direction === "horizontal" ? "ซ้าย-ขวา" : "บน-ล่าง"}
+                </div>
+              </div>
+
+              <div style={{ padding: "16px 0", display: "flex", gap: 10 }}>
+                <button onClick={applyRemediation} style={{ flex: 1, padding: "12px", borderRadius: 4, border: `1px solid ${REM_DOT_BD}`, background: "#1a0f2e", color: REM_DOT_COLOR, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 15 }}>ยืนยัน เพิ่มเข็มแก้ไข</button>
+                <button onClick={() => setRemDialog(null)} style={{ padding: "12px 16px", borderRadius: 4, border: "1px solid #1e2235", background: "#0d0f18", color: "#555d7a", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 14 }}>ยกเลิก</button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Cell Selected View ── */}
+          {selCell && !selPile && !selRemPile && !remDialog && (
             <div style={{ padding: 16, borderBottom: "1px solid #111420", animation: "slideIn .15s ease" }}>
               <div style={{ fontSize: 10, color: "#1e2235", letterSpacing: 2, marginBottom: 5 }}>FOOTING SELECTED</div>
               <div style={{ fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 18, color: "#fbbf24", marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
@@ -503,6 +872,18 @@ export default function App() {
                     <div key={id} onClick={() => openPile(id)} style={{ display: "flex", alignItems: "center", gap: 6, background: p.s === ST.X ? (ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR]).bg : ST_BG[p.s], border: `1px solid ${p.s === ST.X ? (ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR]).bd : ST_BD[p.s]}`, borderRadius: 4, padding: "6px 10px", cursor: "pointer", fontSize: 13, color: "#cdd1e0" }}>
                       <div style={{ width: 10, height: 10, borderRadius: "50%", background: p.s === ST.X ? (ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR]).dot : ST_DOT[p.s] }} />
                       #{id}
+                    </div>
+                  );
+                })}
+                {/* แสดงเข็มแก้ไขของ cell นี้ */}
+                {findRemGroupsForCell(remGroups, selCell.pileIds).flatMap(g => g.remPileIds).map(rid => {
+                  const rp = remPiles[rid];
+                  if (!rp) return null;
+                  const color = rp.s === ST.D ? "#22c55e" : rp.s === ST.X ? "#ef4444" : REM_DOT_COLOR;
+                  return (
+                    <div key={rid} onClick={() => openRemPile(rid)} style={{ display: "flex", alignItems: "center", gap: 6, background: "#1a0f2e", border: `1px solid ${REM_DOT_BD}`, borderRadius: 4, padding: "6px 10px", cursor: "pointer", fontSize: 13, color: "#cdd1e0" }}>
+                      <div style={{ width: 10, height: 10, background: color, transform: "rotate(45deg)", flexShrink: 0 }} />
+                      #{rid}
                     </div>
                   );
                 })}
@@ -529,12 +910,28 @@ export default function App() {
             </div>
           )}
 
-          {selPile && form && (
+          {/* ── Pile Detail Form (ทั้งเข็มปกติและเข็มแก้ไข) ── */}
+          {(selPile || selRemPile) && form && !remDialog && (
             <div style={{ padding: 16, flex: 1, overflow: "auto", animation: "slideIn .15s ease" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                 <div>
-                  <div style={{ fontSize: 10, color: "#1e2235", letterSpacing: 2 }}>บันทึกข้อมูลหน้างาน</div>
-                  <div style={{ fontFamily: "'Sarabun',sans-serif", fontSize: 22, fontWeight: 700, color: "#fbbf24" }}>เสาเข็ม #{selPile}</div>
+                  <div style={{ fontSize: 10, color: "#1e2235", letterSpacing: 2 }}>
+                    {selRemPile ? "บันทึกข้อมูลเข็มแก้ไข" : "บันทึกข้อมูลหน้างาน"}
+                  </div>
+                  <div style={{ fontFamily: "'Sarabun',sans-serif", fontSize: 22, fontWeight: 700, color: selRemPile ? REM_DOT_COLOR : "#fbbf24" }}>
+                    {selRemPile ? (
+                      <>
+                        <span style={{ fontSize: 13, color: "#555d7a", fontWeight: 400 }}>แก้ไข</span> #{selRemPile}
+                      </>
+                    ) : (
+                      <>เสาเข็ม #{selPile}</>
+                    )}
+                  </div>
+                  {selRemPile && remPiles[selRemPile] && (
+                    <div style={{ fontSize: 11, color: "#555d7a", fontFamily: "'Sarabun',sans-serif", marginTop: 2 }}>
+                      เข็มเดิม: #{remPiles[selRemPile].parentPileId} · {remPiles[selRemPile].remCase}
+                    </div>
+                  )}
                 </div>
                 <button onClick={closePanel} style={{ background: "none", border: "none", color: "#333c5a", cursor: "pointer", fontSize: 24, padding: "0 5px" }}>✕</button>
               </div>
@@ -606,7 +1003,34 @@ export default function App() {
                   <textarea className="inp" rows={2} placeholder="บันทึกปัญหา หรือข้อมูลเพิ่มเติม..." value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} style={{ resize: "vertical" }} />
                 </div>
 
-                {piles[selPile]?.date && (
+                {/* ปุ่มเพิ่มเสาเข็มแก้ไข (เฉพาะเข็มปกติที่เฟล + ยังไม่มี remediation) */}
+                {selPile && piles[selPile]?.s === ST.X && !findRemGroupForPile(remGroups, selPile) && (
+                  <button onClick={() => openRemDialog(selPile)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 14, background: "#1a0f2e", border: `1px solid ${REM_DOT_BD}`, color: REM_DOT_COLOR }}>
+                    <div style={{ width: 10, height: 10, background: REM_DOT_COLOR, transform: "rotate(45deg)" }} />
+                    เพิ่มเสาเข็มแก้ไข
+                  </button>
+                )}
+
+                {/* แสดงข้อมูล remediation group ถ้ามี */}
+                {selPile && findRemGroupForPile(remGroups, selPile) && (() => {
+                  const group = findRemGroupForPile(remGroups, selPile);
+                  return (
+                    <div style={{ background: "#1a0f2e", borderRadius: 4, padding: 12, border: `1px solid ${REM_DOT_BD}`, fontSize: 12, fontFamily: "'Sarabun',sans-serif" }}>
+                      <div style={{ color: REM_DOT_COLOR, fontWeight: 700, marginBottom: 6 }}>เสาเข็มแก้ไข ({group.remCase})</div>
+                      <div style={{ color: "#8a94b5", lineHeight: 1.8 }}>
+                        ทิศทาง: {group.direction === "horizontal" ? "ซ้าย-ขวา" : "บน-ล่าง"}<br />
+                        ระยะห่าง: {group.spacing} ม.<br />
+                        เข็มแก้ไข: {group.remPileIds.map(rid => `#${rid}`).join(", ")}
+                      </div>
+                      <button onClick={() => removeRemediation(selPile)} style={{ marginTop: 8, padding: "6px 12px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 11, background: "#210b0b", border: "1px solid #8c1c1c", color: "#ef4444" }}>
+                        ลบเข็มแก้ไข
+                      </button>
+                    </div>
+                  );
+                })()}
+
+                {/* Last record (เข็มปกติ) */}
+                {selPile && piles[selPile]?.date && (
                   <div style={{ background: "#0d0f18", borderRadius: 4, padding: 12, fontSize: 12, color: "#333c5a", border: "1px solid #111420", lineHeight: 1.8 }}>
                     <div style={{ color: "#16703a", fontFamily: "'Sarabun',sans-serif", fontSize: 12, marginBottom: 6, fontWeight: "bold" }}>บันทึกล่าสุด ☁️</div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
@@ -618,16 +1042,30 @@ export default function App() {
                     </div>
                   </div>
                 )}
+
+                {/* Last record (เข็มแก้ไข) */}
+                {selRemPile && remPiles[selRemPile]?.date && (
+                  <div style={{ background: "#0d0f18", borderRadius: 4, padding: 12, fontSize: 12, color: "#333c5a", border: "1px solid #111420", lineHeight: 1.8 }}>
+                    <div style={{ color: REM_DOT_BD, fontFamily: "'Sarabun',sans-serif", fontSize: 12, marginBottom: 6, fontWeight: "bold" }}>บันทึกล่าสุด ☁️</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+                      <div>📅 วันที่: <span style={{ color: "#8a94b5" }}>{remPiles[selRemPile].date}</span></div>
+                      <div>⏱️ เวลา: <span style={{ color: "#8a94b5" }}>{remPiles[selRemPile].startTime || "-"} ถึง {remPiles[selRemPile].endTime || "-"} น.</span></div>
+                      <div>⏬ Tip: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{remPiles[selRemPile].pileTip || "-"}</span> ม.</div>
+                      <div>⏫ Top: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{remPiles[selRemPile].pileTop || "-"}</span> ม.</div>
+                      <div>🗜️ Press: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{remPiles[selRemPile].pressure || "-"}</span></div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {selPile && form ? (
+          {(selPile || selRemPile) && form && !remDialog ? (
             <div style={{ padding: 16, borderTop: "1px solid #111420", display: "flex", gap: 10, background: "#060810" }}>
-              <button onClick={savePile} style={{ flex: 1, padding: "12px", borderRadius: 4, border: "1px solid #16703a", background: "#0b2117", color: "#22c55e", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 15 }}>บันทึก ☁️</button>
+              <button onClick={savePile} style={{ flex: 1, padding: "12px", borderRadius: 4, border: `1px solid ${selRemPile ? REM_DOT_BD : "#16703a"}`, background: selRemPile ? "#1a0f2e" : "#0b2117", color: selRemPile ? REM_DOT_COLOR : "#22c55e", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 15 }}>บันทึก ☁️</button>
               <button onClick={closePanel} style={{ padding: "12px 16px", borderRadius: 4, border: "1px solid #1e2235", background: "#0d0f18", color: "#555d7a", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 14 }}>ยกเลิก</button>
             </div>
-          ) : !selCell && (
+          ) : !selCell && !remDialog && (
             <div className="desktop-placeholder" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", color: "#151825", textAlign: "center", padding: 20 }}>
               <div style={{ fontSize: 32, marginBottom: 12, opacity: .4 }}>👇</div>
               <div style={{ fontSize: 14, fontFamily: "'Sarabun',sans-serif", lineHeight: 1.9 }}>
