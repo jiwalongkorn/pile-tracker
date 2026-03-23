@@ -242,10 +242,14 @@ export default function App() {
 
   const stats = useMemo(() => {
     const vals = Object.values(piles);
-    const done = vals.filter(p => p.s === ST.D).length;
+    const remVals = Object.values(remPiles);
+    const doneRegular = vals.filter(p => p.s === ST.D).length;
+    const doneRem = remVals.filter(p => p.s === ST.D).length;
+    const done = doneRegular + doneRem;
     const issue = vals.filter(p => p.s === ST.X).length;
-    return { done, issue, pending: TOTAL - done - issue, pct: ((done / TOTAL) * 100).toFixed(1) };
-  }, [piles]);
+    const total = TOTAL + remVals.length;
+    return { done, issue, pending: TOTAL - doneRegular - issue, pct: ((done / total) * 100).toFixed(1) };
+  }, [piles, remPiles]);
 
   const remStats = useMemo(() => {
     const vals = Object.values(remPiles);
