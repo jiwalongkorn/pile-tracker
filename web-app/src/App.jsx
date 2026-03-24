@@ -4,10 +4,8 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "./firebase";
 import * as XLSX from "xlsx";
 
-// ── Gemini API key (เก็บใน localStorage) ──
-const GEMINI_KEY_STORAGE = "gemini_api_key";
-const getGeminiApiKey = () => localStorage.getItem(GEMINI_KEY_STORAGE) || "";
-const setGeminiApiKey = (key) => localStorage.setItem(GEMINI_KEY_STORAGE, key.trim());
+// ── Gemini API key (เก็บใน Firestore เพื่อใช้ร่วมกันทุกเครื่อง) ──
+const GEMINI_KEY_STORAGE = "gemini_api_key"; // localStorage fallback
 
 // ── Image compression + OCR utilities ──
 function compressImage(file, maxWidth = 1200, quality = 0.7) {
@@ -39,8 +37,7 @@ async function uploadPilePhoto(blob, pileId) {
   return getDownloadURL(storageRef);
 }
 
-async function extractPileDataFromPhoto(file) {
-  const apiKey = getGeminiApiKey();
+async function extractPileDataFromPhoto(file, apiKey) {
   if (!apiKey) throw new Error("ยังไม่ได้ตั้งค่า Gemini API Key — กดปุ่ม ⚙️ ที่มุมขวาบนเพื่อใส่ key");
 
   const compressed = await compressImage(file, 1200, 0.8);
@@ -236,6 +233,7 @@ export default function App() {
   const scanInputRef = useRef(null);
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
+  const [geminiKey, setGeminiKeyState] = useState(() => localStorage.getItem(GEMINI_KEY_STORAGE) || "");
 
   // ── ฟังก์ชันหาแถว/คอลัมน์ของเสาเข็ม ──
   const findRowColForPile = (pileId) => {
@@ -333,6 +331,28 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // ── โหลด Gemini API key จาก Firestore (ใช้ร่วมกันทุกเครื่อง) ──
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "settings", "gemini"), (snap) => {
+      const key = snap.exists() ? (snap.data().apiKey || "") : "";
+      setGeminiKeyState(key);
+      if (key) localStorage.setItem(GEMINI_KEY_STORAGE, key); // cache locally
+    });
+    return () => unsub();
+  }, []);
+
+  const saveGeminiKey = async (key) => {
+    const trimmed = key.trim();
+    setGeminiKeyState(trimmed);
+    if (trimmed) {
+      await setDoc(doc(db, "settings", "gemini"), { apiKey: trimmed });
+      localStorage.setItem(GEMINI_KEY_STORAGE, trimmed);
+    } else {
+      await setDoc(doc(db, "settings", "gemini"), { apiKey: "" });
+      localStorage.removeItem(GEMINI_KEY_STORAGE);
+    }
+  };
+
   const stats = useMemo(() => {
     const vals = Object.values(piles);
     const remVals = Object.values(remPiles);
@@ -429,7 +449,7 @@ export default function App() {
     if (!photoFile) return;
     setOcrLoading(true);
     try {
-      const result = await extractPileDataFromPhoto(photoFile);
+      const result = await extractPileDataFromPhoto(photoFile, geminiKey);
       setOcrResult(result);
     } catch (err) {
       console.error("OCR error:", err);
@@ -461,7 +481,7 @@ export default function App() {
     e.target.value = "";
     setOcrLoading(true);
     try {
-      const result = await extractPileDataFromPhoto(file);
+      const result = await extractPileDataFromPhoto(file, geminiKey);
       const pileNo = result.pileNo ? parseInt(result.pileNo) : null;
       if (pileNo && piles[pileNo]) {
         const foundCell = findCellByPileId(String(pileNo));
@@ -860,7 +880,7 @@ export default function App() {
               <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style={{ color: "#a855f7" }}>
                 aistudio.google.com/apikey
               </a>
-              <br />Key จะเก็บในเครื่องนี้เท่านั้น (localStorage)
+              <br />Key จะเก็บใน cloud — ตั้งครั้งเดียว ใช้ได้ทุกเครื่อง
             </div>
             <input
               className="inp"
@@ -874,13 +894,13 @@ export default function App() {
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 onClick={() => {
-                  if (apiKeyInput.trim()) { setGeminiApiKey(apiKeyInput); setShowApiKeyDialog(false); }
+                  if (apiKeyInput.trim()) { saveGeminiKey(apiKeyInput); setShowApiKeyDialog(false); }
                 }}
                 style={{ flex: 1, padding: "10px", borderRadius: 4, border: "1px solid #16703a", background: "#0b2117", color: "#22c55e", cursor: "pointer", fontWeight: 700, fontSize: 14 }}
               >บันทึก</button>
-              {getGeminiApiKey() && (
+              {geminiKey && (
                 <button
-                  onClick={() => { setGeminiApiKey(""); setShowApiKeyDialog(false); }}
+                  onClick={() => { saveGeminiKey(""); setShowApiKeyDialog(false); }}
                   style={{ padding: "10px 14px", borderRadius: 4, border: "1px solid #8c1c1c", background: "#210b0b", color: "#ef4444", cursor: "pointer", fontSize: 13 }}
                 >ลบ Key</button>
               )}
@@ -919,7 +939,7 @@ export default function App() {
           <input ref={scanInputRef} type="file" accept="image/*" capture="environment" hidden onChange={handleScanPhoto} />
           <button
             onClick={() => {
-              if (!getGeminiApiKey()) { setApiKeyInput(""); setShowApiKeyDialog(true); return; }
+              if (!geminiKey) { setApiKeyInput(""); setShowApiKeyDialog(true); return; }
               scanInputRef.current?.click();
             }}
             disabled={ocrLoading}
@@ -937,9 +957,9 @@ export default function App() {
             {ocrLoading ? "AI กำลังอ่าน..." : "📷 สแกน"}
           </button>
           <button
-            onClick={() => { setApiKeyInput(getGeminiApiKey()); setShowApiKeyDialog(true); }}
+            onClick={() => { setApiKeyInput(geminiKey); setShowApiKeyDialog(true); }}
             title="ตั้งค่า Gemini API Key"
-            style={{ background: "none", border: "none", color: getGeminiApiKey() ? "#22c55e" : "#ef4444", cursor: "pointer", fontSize: 18, padding: "4px 6px" }}
+            style={{ background: "none", border: "none", color: geminiKey ? "#22c55e" : "#ef4444", cursor: "pointer", fontSize: 18, padding: "4px 6px" }}
           >⚙️</button>
           <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
             <span style={{ fontSize: 14, color: "#22c55e", fontWeight: 600 }}>{stats.pct}%</span>
