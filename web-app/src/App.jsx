@@ -880,9 +880,18 @@ export default function App() {
         .mobile-drag-handle { display: none; }
 
         @media (max-width: 768px) {
-          .controls-bar { flex-direction: column; align-items: stretch; gap: 12px; }
-          .stat-box { flex: 1; text-align: center; }
-          .search-box { width: 100%; margin-left: 0 !important; margin-top: 8px; justify-content: space-between; }
+          .app-header { padding: 8px 12px !important; gap: 8px !important; }
+          .app-header .app-title { font-size: 13px !important; }
+          .app-header .app-subtitle { display: none; }
+          .app-header .header-actions { gap: 6px !important; }
+          .app-header .btn-export { display: none !important; }
+          .app-header .btn-scan { padding: 6px 10px !important; font-size: 12px !important; }
+          .controls-bar { padding: 8px 12px !important; gap: 8px !important; }
+          .stat-row { gap: 4px !important; }
+          .stat-box { padding: 4px 6px !important; }
+          .stat-box .stat-label { font-size: 8px !important; }
+          .stat-box .stat-value { font-size: 14px !important; }
+          .search-box { width: 100%; margin-left: 0 !important; margin-top: 4px; justify-content: space-between; }
           .backdrop { display: block; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(2px); z-index: 998; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
           .backdrop.open { opacity: 1; pointer-events: auto; }
           .side-panel { position: absolute; bottom: 0; left: 0; right: 0; width: 100%; height: auto; max-height: 85vh; border-left: none; border-top: 1px solid #2a3045; border-radius: 20px 20px 0 0; box-shadow: 0 -10px 30px rgba(0,0,0,0.8); z-index: 999; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1); }
@@ -954,14 +963,15 @@ export default function App() {
       )}
 
       {/* HEADER */}
-      <div style={{ background: "#060810", borderBottom: "1px solid #111420", padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+      <div className="app-header" style={{ background: "#060810", borderBottom: "1px solid #111420", padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
         <div style={{ width: 28, height: 28, background: "linear-gradient(135deg,#0b2117,#16703a)", borderRadius: 4, display: "grid", placeItems: "center", fontSize: 13 }}>⬛</div>
-        <div>
-          <div style={{ fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 16 }}>ติดตามการกดเสาเข็ม (Blueprint)</div>
-          <div style={{ fontSize: 9, color: "#1e2235", letterSpacing: 3 }}>GRID A–M × 1–21 · F1/F2 · 1,111 PILES</div>
+        <div style={{ minWidth: 0 }}>
+          <div className="app-title" style={{ fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 16, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>ติดตามการกดเสาเข็ม (Blueprint)</div>
+          <div className="app-subtitle" style={{ fontSize: 9, color: "#1e2235", letterSpacing: 3 }}>GRID A–M × 1–21 · F1/F2 · 1,111 PILES</div>
         </div>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
+        <div className="header-actions" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
           <button
+            className="btn-export"
             onClick={exportToExcel}
             style={{
               display: "flex", alignItems: "center", gap: 6,
@@ -978,6 +988,7 @@ export default function App() {
           </button>
           <input ref={scanInputRef} type="file" accept="image/*" hidden onChange={handleScanPhoto} />
           <button
+            className="btn-scan"
             onClick={() => {
               if (!geminiKey) { setApiKeyInput(""); setShowApiKeyDialog(true); return; }
               scanInputRef.current?.click();
@@ -1012,7 +1023,8 @@ export default function App() {
       </div>
 
       <div className="controls-bar">
-        <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
+          <div className="stat-row" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {[
             { l: "ทั้งหมด", v: TOTAL, c: "#cdd1e0" },
             { l: "กดแล้ว", v: stats.done, c: "#22c55e" },
@@ -1020,11 +1032,12 @@ export default function App() {
             { l: "มีปัญหา", v: stats.issue, c: "#ef4444" },
             ...(remStats.total > 0 ? [{ l: "แก้ไข", v: remStats.total, c: REM_DOT_COLOR }] : []),
           ].map(({ l, v, c }) => (
-            <div key={l} className="stat-box" style={{ background: "#0d0f18", border: "1px solid #111420", borderRadius: 4, padding: "6px 14px", flexGrow: 1 }}>
-              <div style={{ fontSize: 9, color: "#252c42", fontFamily: "'Sarabun',sans-serif" }}>{l}</div>
-              <div style={{ fontSize: 18, fontWeight: 600, color: c }}>{v.toLocaleString()}</div>
+            <div key={l} className="stat-box" style={{ background: "#0d0f18", border: "1px solid #111420", borderRadius: 4, padding: "6px 14px", flex: 1, textAlign: "center" }}>
+              <div className="stat-label" style={{ fontSize: 9, color: "#252c42", fontFamily: "'Sarabun',sans-serif" }}>{l}</div>
+              <div className="stat-value" style={{ fontSize: 18, fontWeight: 600, color: c }}>{v.toLocaleString()}</div>
             </div>
           ))}
+          </div>
           <div className="search-box" style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto", background: "#0d0f18", padding: "8px 12px", borderRadius: 4, border: "1px solid #1e2235" }}>
             <span style={{ fontSize: 13, color: "#555d7a", fontFamily: "'Sarabun',sans-serif" }}>🔍 ค้นหาเบอร์:</span>
             <input
