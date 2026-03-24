@@ -976,7 +976,7 @@ export default function App() {
           >
             📥 Export Excel
           </button>
-          <input ref={scanInputRef} type="file" accept="image/*" capture="environment" hidden onChange={handleScanPhoto} />
+          <input ref={scanInputRef} type="file" accept="image/*" hidden onChange={handleScanPhoto} />
           <button
             onClick={() => {
               if (!geminiKey) { setApiKeyInput(""); setShowApiKeyDialog(true); return; }
@@ -1252,7 +1252,7 @@ export default function App() {
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {/* ── Photo Upload + OCR ── */}
                 <div>
-                  <input id="pile-photo-input" type="file" accept="image/*" capture="environment" hidden onChange={handlePhotoSelect} />
+                  <input id="pile-photo-input" type="file" accept="image/*" hidden onChange={handlePhotoSelect} />
                   {!photoPreview ? (
                     <label htmlFor="pile-photo-input" style={{
                       display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
