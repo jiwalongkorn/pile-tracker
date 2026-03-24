@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { doc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "./firebase";
+import { db } from "./firebase";
 import * as XLSX from "xlsx";
 
 // ── Gemini API key (เก็บใน Firestore เพื่อใช้ร่วมกันทุกเครื่อง) ──
@@ -31,10 +30,20 @@ function fileToBase64(blob) {
   });
 }
 
-async function uploadPilePhoto(blob, pileId) {
-  const storageRef = ref(storage, `piles/${pileId}/photo.jpg`);
-  await uploadBytes(storageRef, blob);
-  return getDownloadURL(storageRef);
+async function uploadPilePhoto(blob, pileId, scriptUrl) {
+  if (!scriptUrl) return null;
+  const base64 = await new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.readAsDataURL(blob);
+  });
+  const resp = await fetch(scriptUrl, {
+    method: "POST",
+    body: JSON.stringify({ image: base64, filename: `pile_${pileId}.jpg` }),
+  });
+  if (!resp.ok) throw new Error(`Upload failed: HTTP ${resp.status}`);
+  const data = await resp.json();
+  return data.url;
 }
 
 async function extractPileDataFromPhoto(file, apiKey) {
@@ -233,7 +242,9 @@ export default function App() {
   const scanInputRef = useRef(null);
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
+  const [driveUrlInput, setDriveUrlInput] = useState("");
   const [geminiKey, setGeminiKeyState] = useState(() => localStorage.getItem(GEMINI_KEY_STORAGE) || "");
+  const [driveScriptUrl, setDriveScriptUrl] = useState("");
 
   // ── ฟังก์ชันหาแถว/คอลัมน์ของเสาเข็ม ──
   const findRowColForPile = (pileId) => {
@@ -340,6 +351,20 @@ export default function App() {
     });
     return () => unsub();
   }, []);
+
+  // ── โหลด Google Drive Script URL จาก Firestore ──
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "settings", "drive"), (snap) => {
+      setDriveScriptUrl(snap.exists() ? (snap.data().scriptUrl || "") : "");
+    });
+    return () => unsub();
+  }, []);
+
+  const saveDriveScriptUrl = async (url) => {
+    const trimmed = url.trim();
+    setDriveScriptUrl(trimmed);
+    await setDoc(doc(db, "settings", "drive"), { scriptUrl: trimmed });
+  };
 
   const saveGeminiKey = async (key) => {
     const trimmed = key.trim();
@@ -541,7 +566,7 @@ export default function App() {
     if (pendingPhoto) {
       try {
         const compressed = await compressImage(pendingPhoto, 1200, 0.7);
-        const photoUrl = await uploadPilePhoto(compressed, pileId);
+        const photoUrl = await uploadPilePhoto(compressed, pileId, driveScriptUrl);
         // อัพเดท photoUrl หลังอัพรูปสำเร็จ
         if (isRem) {
           const freshRem = { ...(remPiles[pileId] || {}), photoUrl };
@@ -870,17 +895,19 @@ export default function App() {
         @keyframes glowPulse{from{box-shadow:0 0 5px 2px #fbbf24;}to{box-shadow:0 0 15px 5px #fbbf24;}}
       `}</style>
 
-      {/* API Key Dialog */}
+      {/* Settings Dialog */}
       {showApiKeyDialog && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div style={{ background: "#0d0f18", border: "1px solid #1e2235", borderRadius: 8, padding: 24, width: "100%", maxWidth: 420, fontFamily: "'Sarabun',sans-serif" }}>
-            <div style={{ fontWeight: 700, fontSize: 16, color: "#cdd1e0", marginBottom: 8 }}>🔑 ตั้งค่า Gemini API Key</div>
-            <div style={{ fontSize: 12, color: "#555d7a", marginBottom: 16, lineHeight: 1.7 }}>
+            <div style={{ fontWeight: 700, fontSize: 18, color: "#cdd1e0", marginBottom: 16 }}>⚙️ ตั้งค่า</div>
+
+            {/* Gemini API Key */}
+            <div style={{ fontWeight: 600, fontSize: 14, color: "#cdd1e0", marginBottom: 6 }}>🔑 Gemini API Key</div>
+            <div style={{ fontSize: 11, color: "#555d7a", marginBottom: 8, lineHeight: 1.6 }}>
               รับ API Key ฟรีได้ที่{" "}
               <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style={{ color: "#a855f7" }}>
                 aistudio.google.com/apikey
               </a>
-              <br />Key จะเก็บใน cloud — ตั้งครั้งเดียว ใช้ได้ทุกเครื่อง
             </div>
             <input
               className="inp"
@@ -888,22 +915,35 @@ export default function App() {
               placeholder="AIzaSy..."
               value={apiKeyInput}
               onChange={e => setApiKeyInput(e.target.value)}
-              style={{ width: "100%", marginBottom: 12, fontSize: 13 }}
+              style={{ width: "100%", marginBottom: 16, fontSize: 13 }}
               autoFocus
             />
+
+            {/* Google Drive Script URL */}
+            <div style={{ fontWeight: 600, fontSize: 14, color: "#cdd1e0", marginBottom: 6 }}>📁 Google Drive Script URL</div>
+            <div style={{ fontSize: 11, color: "#555d7a", marginBottom: 8, lineHeight: 1.6 }}>
+              สำหรับอัพโหลดรูปถ่ายลง Google Drive (ไม่ใส่ = ไม่เก็บรูป)
+            </div>
+            <input
+              className="inp"
+              type="text"
+              placeholder="https://script.google.com/macros/s/..."
+              value={driveUrlInput}
+              onChange={e => setDriveUrlInput(e.target.value)}
+              style={{ width: "100%", marginBottom: 16, fontSize: 13 }}
+            />
+
+            <div style={{ fontSize: 10, color: "#555d7a", marginBottom: 12 }}>ตั้งค่าครั้งเดียว ใช้ได้ทุกเครื่อง (เก็บใน cloud)</div>
+
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 onClick={() => {
-                  if (apiKeyInput.trim()) { saveGeminiKey(apiKeyInput); setShowApiKeyDialog(false); }
+                  if (apiKeyInput.trim()) saveGeminiKey(apiKeyInput);
+                  saveDriveScriptUrl(driveUrlInput);
+                  setShowApiKeyDialog(false);
                 }}
                 style={{ flex: 1, padding: "10px", borderRadius: 4, border: "1px solid #16703a", background: "#0b2117", color: "#22c55e", cursor: "pointer", fontWeight: 700, fontSize: 14 }}
               >บันทึก</button>
-              {geminiKey && (
-                <button
-                  onClick={() => { saveGeminiKey(""); setShowApiKeyDialog(false); }}
-                  style={{ padding: "10px 14px", borderRadius: 4, border: "1px solid #8c1c1c", background: "#210b0b", color: "#ef4444", cursor: "pointer", fontSize: 13 }}
-                >ลบ Key</button>
-              )}
               <button
                 onClick={() => setShowApiKeyDialog(false)}
                 style={{ padding: "10px 14px", borderRadius: 4, border: "1px solid #1e2235", background: "transparent", color: "#555d7a", cursor: "pointer", fontSize: 13 }}
@@ -957,7 +997,7 @@ export default function App() {
             {ocrLoading ? "AI กำลังอ่าน..." : "📷 สแกน"}
           </button>
           <button
-            onClick={() => { setApiKeyInput(geminiKey); setShowApiKeyDialog(true); }}
+            onClick={() => { setApiKeyInput(geminiKey); setDriveUrlInput(driveScriptUrl); setShowApiKeyDialog(true); }}
             title="ตั้งค่า Gemini API Key"
             style={{ background: "none", border: "none", color: geminiKey ? "#22c55e" : "#ef4444", cursor: "pointer", fontSize: 18, padding: "4px 6px" }}
           >⚙️</button>
