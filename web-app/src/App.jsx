@@ -388,7 +388,7 @@ export default function App() {
     const issueRem = remVals.filter(p => p.s === ST.X).length;
     const issue = issueRegular + issueRem;
     const total = TOTAL + remVals.length;
-    return { done, issue, pending: TOTAL - doneRegular - issueRegular, pct: ((done / total) * 100).toFixed(1) };
+    return { done, issue, pending: TOTAL - doneRegular - issueRegular, pct: (((done + issue) / total) * 100).toFixed(1) };
   }, [piles, remPiles]);
 
   const remStats = useMemo(() => {
