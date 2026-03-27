@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { doc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
-import { db } from "./firebase";
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
+import { db, auth } from "./firebase";
 import * as XLSX from "xlsx";
 
 // ── Gemini API key (เก็บใน Firestore เพื่อใช้ร่วมกันทุกเครื่อง) ──
@@ -246,6 +247,15 @@ export default function App() {
   const [geminiKey, setGeminiKeyState] = useState(() => localStorage.getItem(GEMINI_KEY_STORAGE) || "");
   const [driveScriptUrl, setDriveScriptUrl] = useState("");
 
+  // ── Auth state ──
+  const [user, setUser] = useState(null);
+  const [showLoginDialog, setShowLoginDialog] = useState(false);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+  const canEdit = !!user;
+
   // ── ฟังก์ชันหาแถว/คอลัมน์ของเสาเข็ม ──
   const findRowColForPile = (pileId) => {
     const numId = parseInt(pileId);
@@ -342,6 +352,12 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // ── Auth state listener ──
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => setUser(u));
+    return () => unsub();
+  }, []);
+
   // ── โหลด Gemini API key จาก Firestore (ใช้ร่วมกันทุกเครื่อง) ──
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "settings", "gemini"), (snap) => {
@@ -361,12 +377,39 @@ export default function App() {
   }, []);
 
   const saveDriveScriptUrl = async (url) => {
+    if (!user) { setShowLoginDialog(true); return; }
     const trimmed = url.trim();
     setDriveScriptUrl(trimmed);
     await setDoc(doc(db, "settings", "drive"), { scriptUrl: trimmed });
   };
 
+  // ── Login / Logout ──
+  const handleLogin = async () => {
+    setLoginError("");
+    setLoginLoading(true);
+    try {
+      await signInWithEmailAndPassword(auth, loginEmail.trim(), loginPassword);
+      setShowLoginDialog(false);
+      setLoginPassword("");
+      setLoginError("");
+    } catch (err) {
+      const code = err.code || "";
+      if (code === "auth/wrong-password" || code === "auth/invalid-credential" || code === "auth/invalid-email") {
+        setLoginError("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
+      } else if (code === "auth/too-many-requests") {
+        setLoginError("ลองผิดหลายครั้ง กรุณารอสักครู่");
+      } else {
+        setLoginError("เข้าสู่ระบบไม่สำเร็จ: " + err.message);
+      }
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleLogout = () => signOut(auth);
+
   const saveGeminiKey = async (key) => {
+    if (!user) { setShowLoginDialog(true); return; }
     const trimmed = key.trim();
     setGeminiKeyState(trimmed);
     if (trimmed) {
@@ -539,6 +582,7 @@ export default function App() {
   };
 
   const savePile = async () => {
+    if (!user) { setShowLoginDialog(true); return; }
     const pileId = selRemPile || selPile;
     if (!pileId) return;
 
@@ -582,6 +626,7 @@ export default function App() {
   };
 
   const markCell = async (ids, status, issueColor = "") => {
+    if (!user) { setShowLoginDialog(true); return; }
     const date = new Date().toISOString().slice(0, 10);
     const updates = {};
     ids.forEach(id => {
@@ -595,6 +640,7 @@ export default function App() {
 
   // ── เพิ่มเสาเข็มแก้ไข ──
   const applyRemediation = async () => {
+    if (!user) { setShowLoginDialog(true); return; }
     if (!remDialog) return;
     const { pileId, remCase, direction, id1, id2 } = remDialog;
     const trimId1 = String(id1).trim();
@@ -653,6 +699,7 @@ export default function App() {
 
   // ── ลบเสาเข็มแก้ไข ──
   const removeRemediation = async (pileId) => {
+    if (!user) { setShowLoginDialog(true); return; }
     const groupKey = `RG-${pileId}`;
     const group = remGroups[groupKey];
     if (!group) return;
@@ -949,12 +996,61 @@ export default function App() {
                 onClick={() => {
                   if (apiKeyInput.trim()) saveGeminiKey(apiKeyInput);
                   saveDriveScriptUrl(driveUrlInput);
-                  setShowApiKeyDialog(false);
+                  if (canEdit) setShowApiKeyDialog(false);
                 }}
-                style={{ flex: 1, padding: "10px", borderRadius: 4, border: "1px solid #16703a", background: "#0b2117", color: "#22c55e", cursor: "pointer", fontWeight: 700, fontSize: 14 }}
-              >บันทึก</button>
+                disabled={!canEdit}
+                style={{ flex: 1, padding: "10px", borderRadius: 4, border: "1px solid #16703a", background: "#0b2117", color: "#22c55e", cursor: canEdit ? "pointer" : "not-allowed", fontWeight: 700, fontSize: 14, opacity: canEdit ? 1 : 0.4 }}
+              >{canEdit ? "บันทึก" : "🔒 ต้องล็อกอินก่อน"}</button>
               <button
                 onClick={() => setShowApiKeyDialog(false)}
+                style={{ padding: "10px 14px", borderRadius: 4, border: "1px solid #1e2235", background: "transparent", color: "#555d7a", cursor: "pointer", fontSize: 13 }}
+              >ยกเลิก</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Login Dialog */}
+      {showLoginDialog && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#0d0f18", border: "1px solid #1e2235", borderRadius: 8, padding: 24, width: "100%", maxWidth: 380, fontFamily: "'Sarabun',sans-serif" }}>
+            <div style={{ fontWeight: 700, fontSize: 18, color: "#cdd1e0", marginBottom: 16 }}>🔒 เข้าสู่ระบบ</div>
+            <div style={{ fontSize: 12, color: "#555d7a", marginBottom: 12 }}>เข้าสู่ระบบเพื่อแก้ไขข้อมูล</div>
+
+            <div style={{ fontSize: 12, color: "#8a94b5", marginBottom: 4 }}>อีเมล</div>
+            <input
+              className="inp"
+              type="email"
+              placeholder="email@example.com"
+              value={loginEmail}
+              onChange={e => setLoginEmail(e.target.value)}
+              style={{ width: "100%", marginBottom: 12, fontSize: 13 }}
+              autoFocus
+            />
+
+            <div style={{ fontSize: 12, color: "#8a94b5", marginBottom: 4 }}>รหัสผ่าน</div>
+            <input
+              className="inp"
+              type="password"
+              placeholder="รหัสผ่าน"
+              value={loginPassword}
+              onChange={e => setLoginPassword(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !loginLoading) handleLogin(); }}
+              style={{ width: "100%", marginBottom: 16, fontSize: 13 }}
+            />
+
+            {loginError && (
+              <div style={{ fontSize: 12, color: "#ef4444", marginBottom: 12, padding: "8px 10px", background: "#210b0b", border: "1px solid #8c1c1c", borderRadius: 4 }}>{loginError}</div>
+            )}
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={handleLogin}
+                disabled={loginLoading}
+                style={{ flex: 1, padding: "10px", borderRadius: 4, border: "1px solid #16703a", background: "#0b2117", color: "#22c55e", cursor: loginLoading ? "wait" : "pointer", fontWeight: 700, fontSize: 14, opacity: loginLoading ? 0.5 : 1 }}
+              >{loginLoading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}</button>
+              <button
+                onClick={() => { setShowLoginDialog(false); setLoginError(""); setLoginPassword(""); }}
                 style={{ padding: "10px 14px", borderRadius: 4, border: "1px solid #1e2235", background: "transparent", color: "#555d7a", cursor: "pointer", fontSize: 13 }}
               >ยกเลิก</button>
             </div>
@@ -1012,6 +1108,19 @@ export default function App() {
             title="ตั้งค่า Gemini API Key"
             style={{ background: "none", border: "none", color: geminiKey ? "#22c55e" : "#ef4444", cursor: "pointer", fontSize: 18, padding: "4px 6px" }}
           >⚙️</button>
+          {user ? (
+            <button
+              onClick={handleLogout}
+              title="ออกจากระบบ"
+              style={{ background: "none", border: "1px solid #16703a", borderRadius: 4, color: "#22c55e", cursor: "pointer", fontSize: 11, padding: "5px 10px", fontFamily: "'Sarabun',sans-serif", fontWeight: 600, transition: "all .15s" }}
+            >🔓 ออก</button>
+          ) : (
+            <button
+              onClick={() => setShowLoginDialog(true)}
+              title="เข้าสู่ระบบเพื่อแก้ไขข้อมูล"
+              style={{ background: "none", border: "1px solid #fbbf24", borderRadius: 4, color: "#fbbf24", cursor: "pointer", fontSize: 11, padding: "5px 10px", fontFamily: "'Sarabun',sans-serif", fontWeight: 600, transition: "all .15s" }}
+            >🔒 เข้าสู่ระบบ</button>
+          )}
           <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
             <span style={{ fontSize: 14, color: "#22c55e", fontWeight: 600 }}>{stats.pct}%</span>
           </div>
@@ -1178,7 +1287,7 @@ export default function App() {
               </div>
 
               <div style={{ padding: "16px 0", display: "flex", gap: 10 }}>
-                <button onClick={applyRemediation} style={{ flex: 1, padding: "12px", borderRadius: 4, border: `1px solid ${REM_DOT_BD}`, background: "#1a0f2e", color: REM_DOT_COLOR, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 15 }}>ยืนยัน เพิ่มเข็มแก้ไข</button>
+                <button onClick={applyRemediation} disabled={!canEdit} style={{ flex: 1, padding: "12px", borderRadius: 4, border: `1px solid ${REM_DOT_BD}`, background: "#1a0f2e", color: REM_DOT_COLOR, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 15, opacity: canEdit ? 1 : 0.4 }}>ยืนยัน เพิ่มเข็มแก้ไข</button>
                 <button onClick={() => setRemDialog(null)} style={{ padding: "12px 16px", borderRadius: 4, border: "1px solid #1e2235", background: "#0d0f18", color: "#555d7a", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 14 }}>ยกเลิก</button>
               </div>
             </div>
@@ -1215,9 +1324,9 @@ export default function App() {
                 })}
               </div>
               <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={() => markCell(selCell.pileIds, ST.D)} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", background: "#0b2117", border: "1px solid #16703a", color: "#22c55e" }}>✓ กดแล้ว</button>
-                <button onClick={() => setCellIssueMenu(v => !v)} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", background: "#210b0b", border: "1px solid #8c1c1c", color: "#ef4444" }}>! ปัญหา ▾</button>
-                <button onClick={() => markCell(selCell.pileIds, ST.P)} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", background: "#141620", border: "1px solid #272c42", color: "#555d7a" }}>↺ รีเซ็ต</button>
+                <button onClick={() => markCell(selCell.pileIds, ST.D)} disabled={!canEdit} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", background: "#0b2117", border: "1px solid #16703a", color: "#22c55e", opacity: canEdit ? 1 : 0.4 }}>✓ กดแล้ว</button>
+                <button onClick={() => canEdit ? setCellIssueMenu(v => !v) : setShowLoginDialog(true)} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", background: "#210b0b", border: "1px solid #8c1c1c", color: "#ef4444", opacity: canEdit ? 1 : 0.4 }}>! ปัญหา ▾</button>
+                <button onClick={() => markCell(selCell.pileIds, ST.P)} disabled={!canEdit} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", background: "#141620", border: "1px solid #272c42", color: "#555d7a", opacity: canEdit ? 1 : 0.4 }}>↺ รีเซ็ต</button>
               </div>
               {cellIssueMenu && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, animation: "slideIn .15s ease" }}>
@@ -1405,7 +1514,7 @@ export default function App() {
                         ระยะห่าง: {group.spacing} ม.<br />
                         เข็มแก้ไข: {group.remPileIds.map(rid => `#${rid}`).join(", ")}
                       </div>
-                      <button onClick={() => removeRemediation(selPile)} style={{ marginTop: 8, padding: "6px 12px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 11, background: "#210b0b", border: "1px solid #8c1c1c", color: "#ef4444" }}>
+                      <button onClick={() => removeRemediation(selPile)} disabled={!canEdit} style={{ marginTop: 8, padding: "6px 12px", borderRadius: 4, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", fontSize: 11, background: "#210b0b", border: "1px solid #8c1c1c", color: "#ef4444", opacity: canEdit ? 1 : 0.4 }}>
                         ลบเข็มแก้ไข
                       </button>
                     </div>
@@ -1455,7 +1564,7 @@ export default function App() {
 
           {(selPile || selRemPile) && form && !remDialog ? (
             <div style={{ padding: 16, borderTop: "1px solid #111420", display: "flex", gap: 10, background: "#060810" }}>
-              <button onClick={savePile} style={{ flex: 1, padding: "12px", borderRadius: 4, border: `1px solid ${selRemPile ? REM_DOT_BD : "#16703a"}`, background: selRemPile ? "#1a0f2e" : "#0b2117", color: selRemPile ? REM_DOT_COLOR : "#22c55e", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 15 }}>บันทึก ☁️</button>
+              <button onClick={savePile} disabled={!canEdit} style={{ flex: 1, padding: "12px", borderRadius: 4, border: `1px solid ${selRemPile ? REM_DOT_BD : "#16703a"}`, background: selRemPile ? "#1a0f2e" : "#0b2117", color: selRemPile ? REM_DOT_COLOR : "#22c55e", cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 15, opacity: canEdit ? 1 : 0.4 }}>{canEdit ? "บันทึก ☁️" : "🔒 ล็อกอินเพื่อบันทึก"}</button>
               <button onClick={closePanel} style={{ padding: "12px 16px", borderRadius: 4, border: "1px solid #1e2235", background: "#0d0f18", color: "#555d7a", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 14 }}>ยกเลิก</button>
             </div>
           ) : !selCell && !remDialog && (
@@ -1464,6 +1573,12 @@ export default function App() {
               <div style={{ fontSize: 14, fontFamily: "'Sarabun',sans-serif", lineHeight: 1.9 }}>
                 พิมพ์เบอร์เสาเข็มในช่องค้นหา<br />หรือคลิกบน Grid เพื่ออัปเดต
               </div>
+              {!canEdit && (
+                <div style={{ marginTop: 20, padding: "10px 14px", background: "#1a140a", border: "1px solid #7a5a1a", borderRadius: 6, fontSize: 12, color: "#fbbf24", fontFamily: "'Sarabun',sans-serif", lineHeight: 1.7 }}>
+                  🔒 ดูข้อมูลได้เลย<br />
+                  <span style={{ color: "#8a7040" }}>ล็อกอินเพื่อแก้ไขข้อมูล</span>
+                </div>
+              )}
             </div>
           )}
         </div>
