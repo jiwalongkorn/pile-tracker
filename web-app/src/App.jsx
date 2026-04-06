@@ -1,8 +1,206 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, createContext, useContext, memo } from "react";
 import { doc, onSnapshot, setDoc, updateDoc } from "firebase/firestore";
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "./firebase";
 import * as XLSX from "xlsx";
+
+// ── Grid Context (shared state for memoized grid components) ──
+const GridContext = createContext(null);
+const useGrid = () => useContext(GridContext);
+
+// ── Dot: เสาเข็มปกติ (circle) ──
+const Dot = memo(({ id }) => {
+  const { piles, filter, selPile, searchQ, zoom, depthMode, getDepthColor, openPile } = useGrid();
+  const p = piles[id];
+  let dim = false;
+  if (filter !== "all") {
+    if (filter === "rem") {
+      dim = true;
+    } else if (filter.startsWith("x_")) {
+      const fc = filter.replace("x_", "");
+      dim = !(p.s === ST.X && (p.issueColor || DEFAULT_ISSUE_COLOR) === fc);
+    } else {
+      dim = p.s !== filter;
+    }
+  }
+  const isSel = selPile === id;
+  const isSearched = searchQ && String(id) === searchQ;
+  const sz = Math.round(12 * zoom);
+
+  let dotColor = ST_DOT[p.s];
+  let borderColor = p.s === ST.D ? "#16703a" : p.s === ST.X ? "#8c1c1c" : "#272c42";
+  if (p.s === ST.X) {
+    const ic = ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR];
+    dotColor = ic.dot;
+    borderColor = ic.bd;
+  }
+  if (depthMode) {
+    const hasTip = p.pileTip && !isNaN(parseFloat(p.pileTip));
+    if ((p.s === ST.D || p.s === ST.X) && hasTip) {
+      const dc = getDepthColor(p.pileTip);
+      if (dc) { dotColor = dc; borderColor = dc; }
+    } else if ((p.s === ST.D || p.s === ST.X) && !hasTip) {
+      dotColor = "#2a3045"; borderColor = "#333c5a";
+    }
+  }
+
+  const showDepthLabel = depthMode && zoom >= 1.5 && (p.s === ST.D || p.s === ST.X) && p.pileTip;
+
+  return (
+    <div
+      title={`#${id}${p.pileTip ? ` · Tip: ${p.pileTip}ม.` : ""}`}
+      onClick={e => { e.stopPropagation(); openPile(id); }}
+      style={{
+        width: sz, height: sz, borderRadius: "50%", flexShrink: 0,
+        background: dotColor,
+        border: `1px solid ${isSel || isSearched ? "#fbbf24" : borderColor}`,
+        boxShadow: isSearched ? `0 0 10px 4px #fbbf24` : isSel ? `0 0 0 2px #fbbf24` : p.s === ST.D ? "0 0 3px rgba(34,197,94,0.5)" : "none",
+        opacity: dim ? 0.1 : 1,
+        cursor: "pointer",
+        transition: "transform .08s",
+        zIndex: isSel || isSearched ? 10 : 1, position: "relative", overflow: "visible",
+        animation: isSearched ? "glowPulse 1.5s infinite alternate" : "none"
+      }}
+      onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.7)"; e.currentTarget.style.zIndex = 8; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.zIndex = isSel ? 10 : 1; }}
+    >
+      {showDepthLabel && (
+        <div style={{
+          position: "absolute", top: sz + 1, left: "50%", transform: "translateX(-50%)",
+          fontSize: Math.max(7, Math.round(6.5 * zoom)), color: dotColor,
+          whiteSpace: "nowrap", pointerEvents: "none", zIndex: 20,
+          fontFamily: "monospace", textShadow: "0 0 4px #000, 0 0 4px #000"
+        }}>
+          {parseFloat(p.pileTip).toFixed(1)}
+        </div>
+      )}
+    </div>
+  );
+});
+
+// ── RemDot: เข็มแก้ไข (diamond) ──
+const RemDot = memo(({ remId }) => {
+  const { remPiles, selRemPile, zoom, filter, depthMode, getDepthColor, openRemPile } = useGrid();
+  const rp = remPiles[remId];
+  if (!rp) return null;
+  const sz = Math.round(10 * zoom);
+  const isSel = selRemPile === remId;
+  let color = rp.s === ST.D ? "#22c55e" : rp.s === ST.X ? "#ef4444" : REM_DOT_COLOR;
+  let bdColor = rp.s === ST.D ? "#16703a" : rp.s === ST.X ? "#8c1c1c" : REM_DOT_BD;
+  let dim = false;
+  if (filter !== "all" && filter !== "rem") dim = true;
+
+  if (depthMode) {
+    const hasTip = rp.pileTip && !isNaN(parseFloat(rp.pileTip));
+    if ((rp.s === ST.D || rp.s === ST.X) && hasTip) {
+      const dc = getDepthColor(rp.pileTip);
+      if (dc) { color = dc; bdColor = dc; }
+    } else if ((rp.s === ST.D || rp.s === ST.X) && !hasTip) {
+      color = "#2a3045"; bdColor = "#333c5a";
+    }
+  }
+
+  const showDepthLabel = depthMode && zoom >= 1.5 && (rp.s === ST.D || rp.s === ST.X) && rp.pileTip;
+
+  return (
+    <div style={{ position: "relative", flexShrink: 0 }}>
+      <div
+        title={`แก้ไข #${remId} (เข็มเดิม #${rp.parentPileId})${rp.pileTip ? ` · Tip: ${rp.pileTip}ม.` : ""}`}
+        onClick={e => { e.stopPropagation(); openRemPile(remId); }}
+        style={{
+          width: sz, height: sz, flexShrink: 0, cursor: "pointer",
+          background: color,
+          border: `1px solid ${isSel ? "#fbbf24" : bdColor}`,
+          boxShadow: isSel ? "0 0 0 2px #fbbf24" : "none",
+          transform: "rotate(45deg)",
+          opacity: dim ? 0.15 : 1,
+          position: "relative", zIndex: isSel ? 10 : 2,
+          transition: "transform .08s", overflow: "visible",
+        }}
+        onMouseEnter={e => { e.currentTarget.style.transform = "rotate(45deg) scale(1.7)"; }}
+        onMouseLeave={e => { e.currentTarget.style.transform = "rotate(45deg) scale(1)"; }}
+      />
+      {showDepthLabel && (
+        <div style={{
+          position: "absolute", top: sz + 3, left: "50%", transform: "translateX(-50%)",
+          fontSize: Math.max(7, Math.round(6.5 * zoom)), color: color,
+          whiteSpace: "nowrap", pointerEvents: "none", zIndex: 20,
+          fontFamily: "monospace", textShadow: "0 0 4px #000, 0 0 4px #000"
+        }}>
+          {parseFloat(rp.pileTip).toFixed(1)}
+        </div>
+      )}
+    </div>
+  );
+});
+
+// ── Cell: กลุ่มเสาเข็มใน 1 footing ──
+const Cell = memo(({ rowId, colIdx, pileIds, rowType }) => {
+  const { remGroups, zoom, selCell, setSelCell } = useGrid();
+  const isF2 = pileIds.length === 2;
+  const horiz = f2IsHorizontal(colIdx, rowType);
+  const isMainRow = rowType !== "inter";
+  const isMainColumn = colIdx % 2 === 0;
+  const isSel = selCell?.rowId === rowId && selCell?.colIdx === colIdx;
+
+  const dotSz = Math.round(12 * zoom);
+  const gap = Math.round(4 * zoom);
+  const pad = Math.round(12 * zoom);
+
+  const cellRemGroups = findRemGroupsForCell(remGroups, pileIds);
+  const hasRem = cellRemGroups.length > 0;
+
+  let cellW, cellH;
+  if (hasRem) {
+    const remDotSz = Math.round(10 * zoom);
+    const remGap = Math.round(4 * zoom);
+    const dir = cellRemGroups[0]?.direction || "horizontal";
+    if (dir === "horizontal") {
+      const innerW = isF2 ? (horiz ? dotSz * 2 + gap : dotSz) : dotSz;
+      cellW = remDotSz + remGap + innerW + remGap + remDotSz + pad * 2;
+      cellH = isF2 ? (horiz ? dotSz + pad * 2 : dotSz * 2 + gap + pad * 2) : dotSz + pad * 2;
+    } else {
+      cellW = isF2 ? (horiz ? dotSz * 2 + gap + pad * 2 : dotSz + pad * 2) : dotSz + pad * 2;
+      const innerH = isF2 ? (!horiz ? dotSz * 2 + gap : dotSz) : dotSz;
+      cellH = remDotSz + remGap + innerH + remGap + remDotSz + pad * 2;
+    }
+  } else {
+    cellW = isF2 ? (horiz ? dotSz * 2 + gap + pad * 2 : dotSz + pad * 2) : dotSz + pad * 2;
+    cellH = isF2 ? (horiz ? dotSz + pad * 2 : dotSz * 2 + gap + pad * 2) : dotSz + pad * 2;
+  }
+
+  const remDotIds = cellRemGroups.flatMap(g => g.remPileIds || []);
+  const remDirection = cellRemGroups[0]?.direction || "horizontal";
+
+  return (
+    <div
+      title={`${rowId}-${COL_LABELS[colIdx]}: #${pileIds.join(", #")} ${isF2 ? (horiz ? "(F2,C1)" : "(F2,C2)") : ""}`}
+      onClick={() => setSelCell(isSel ? null : { rowId, colIdx, pileIds })}
+      style={{
+        width: cellW, height: cellH, flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        position: "relative", cursor: "pointer",
+        background: isSel ? "rgba(251, 191, 36, 0.08)" : "transparent",
+      }}
+    >
+      <div style={{ position: "absolute", left: 0, right: 0, top: "50%", height: 0, borderTop: isMainRow ? "1px solid #2a3045" : "1px dashed #141825", zIndex: 0 }} />
+      <div style={{ position: "absolute", top: 0, bottom: 0, left: "50%", width: 0, borderLeft: isMainColumn ? "1px solid #2a3045" : "1px dashed #141825", zIndex: 0 }} />
+      <div style={{
+        display: "flex",
+        flexDirection: hasRem ? (remDirection === "horizontal" ? "row" : "column") : (isF2 && !horiz ? "column" : "row"),
+        gap: hasRem ? Math.round(4 * zoom) : (isF2 ? gap : 0),
+        alignItems: "center",
+        background: "#080a10", padding: 3, borderRadius: 10, zIndex: 1
+      }}>
+        {hasRem && remDotIds[0] && <RemDot remId={remDotIds[0]} />}
+        <div style={{ display: "flex", flexDirection: isF2 && !horiz ? "column" : "row", gap: isF2 ? gap : 0, alignItems: "center" }}>
+          {pileIds.map(id => <Dot key={id} id={id} />)}
+        </div>
+        {hasRem && remDotIds[1] && <RemDot remId={remDotIds[1]} />}
+      </div>
+    </div>
+  );
+});
 
 // ── Gemini API key (เก็บใน Firestore เพื่อใช้ร่วมกันทุกเครื่อง) ──
 const GEMINI_KEY_STORAGE = "gemini_api_key"; // localStorage fallback
@@ -452,7 +650,7 @@ export default function App() {
     return { min: Math.min(...tips), max: Math.max(...tips), hasData: true };
   }, [piles, remPiles]);
 
-  const openPile = (id) => {
+  const openPile = useCallback((id) => {
     const p = piles[id];
     setSelPile(id);
     setSelRemPile(null);
@@ -468,9 +666,9 @@ export default function App() {
       pressure: p.pressure || "",
       note: p.note || ""
     });
-  };
+  }, [piles]);
 
-  const openRemPile = (remId) => {
+  const openRemPile = useCallback((remId) => {
     const rp = remPiles[remId];
     if (!rp) return;
     setSelRemPile(remId);
@@ -487,7 +685,7 @@ export default function App() {
       pressure: rp.pressure || "",
       note: rp.note || ""
     });
-  };
+  }, [remPiles]);
 
   const handleSearch = (e) => {
     const val = e.target.value;
@@ -734,14 +932,28 @@ export default function App() {
     return false;
   };
 
-  const getDepthColor = (tipVal) => {
+  // ── Grid layout (memoized, recalculate only when zoom changes) ──
+  const LABEL_W = 40;
+  const { dotSz: gDotSz, gap3: gGap3, pad: gPad, colSlotW } = useMemo(() => {
+    const dotSz = Math.round(12 * zoom);
+    const gap3 = Math.round(4 * zoom);
+    const pad = Math.round(12 * zoom);
+    const cellW = (ci, rowType) => {
+      const horiz = f2IsHorizontal(ci, rowType);
+      return horiz ? (dotSz * 2 + gap3 + pad * 2) : (dotSz + pad * 2);
+    };
+    const colSlotW = Array.from({ length: 41 }, (_, ci) => cellW(ci, "edge"));
+    return { dotSz, gap3, pad, colSlotW };
+  }, [zoom]);
+
+  // ── getDepthColor (memoized) ──
+  const getDepthColor = useCallback((tipVal) => {
     if (!depthStats.hasData) return null;
     const val = parseFloat(tipVal);
     if (isNaN(val)) return null;
-    const deepest = Math.abs(depthStats.min); // ลึกที่สุด = ติดลบมากที่สุด
+    const deepest = Math.abs(depthStats.min);
     if (deepest === 0) return null;
-    const t = Math.min(1, Math.abs(val) / deepest); // 0=ผิวดิน (0ม.), 1=ลึกที่สุด
-    // yellow (#eab308) → green (#22c55e) → red (#ef4444)
+    const t = Math.min(1, Math.abs(val) / deepest);
     if (t < 0.5) {
       const f = t * 2;
       return `rgb(${Math.round(234+(34-234)*f)},${Math.round(179+(197-179)*f)},${Math.round(8+(94-8)*f)})`;
@@ -749,215 +961,7 @@ export default function App() {
       const f = (t - 0.5) * 2;
       return `rgb(${Math.round(34+(239-34)*f)},${Math.round(197+(68-197)*f)},${Math.round(94+(68-94)*f)})`;
     }
-  };
-
-  const Dot = ({ id }) => {
-    const p = piles[id];
-    let dim = false;
-    if (filter !== "all") {
-      if (filter === "rem") {
-        dim = true; // dim ทุก dot ปกติ ตอนกรอง "แก้ไข"
-      } else if (filter.startsWith("x_")) {
-        const fc = filter.replace("x_", "");
-        dim = !(p.s === ST.X && (p.issueColor || DEFAULT_ISSUE_COLOR) === fc);
-      } else {
-        dim = p.s !== filter;
-      }
-    }
-    const isSel = selPile === id;
-    const isSearched = searchQ && String(id) === searchQ;
-    const sz = Math.round(12 * zoom);
-
-    let dotColor = ST_DOT[p.s];
-    let borderColor = p.s === ST.D ? "#16703a" : p.s === ST.X ? "#8c1c1c" : "#272c42";
-    if (p.s === ST.X) {
-      const ic = ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR];
-      dotColor = ic.dot;
-      borderColor = ic.bd;
-    }
-    if (depthMode) {
-      const hasTip = p.pileTip && !isNaN(parseFloat(p.pileTip));
-      if ((p.s === ST.D || p.s === ST.X) && hasTip) {
-        const dc = getDepthColor(p.pileTip);
-        if (dc) { dotColor = dc; borderColor = dc; }
-      } else if ((p.s === ST.D || p.s === ST.X) && !hasTip) {
-        dotColor = "#2a3045"; borderColor = "#333c5a";
-      }
-    }
-
-    const showDepthLabel = depthMode && zoom >= 1.5 && (p.s === ST.D || p.s === ST.X) && p.pileTip;
-
-    return (
-      <div
-        title={`#${id}${p.pileTip ? ` · Tip: ${p.pileTip}ม.` : ""}`}
-        onClick={e => { e.stopPropagation(); openPile(id); }}
-        style={{
-          width: sz, height: sz, borderRadius: "50%", flexShrink: 0,
-          background: dotColor,
-          border: `1px solid ${isSel || isSearched ? "#fbbf24" : borderColor}`,
-          boxShadow: isSearched ? `0 0 10px 4px #fbbf24` : isSel ? `0 0 0 2px #fbbf24` : p.s === ST.D ? "0 0 3px rgba(34,197,94,0.5)" : "none",
-          opacity: dim ? 0.1 : 1,
-          cursor: "pointer",
-          transition: "transform .08s",
-          zIndex: isSel || isSearched ? 10 : 1, position: "relative", overflow: "visible",
-          animation: isSearched ? "glowPulse 1.5s infinite alternate" : "none"
-        }}
-        onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.7)"; e.currentTarget.style.zIndex = 8; }}
-        onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.zIndex = isSel ? 10 : 1; }}
-      >
-        {showDepthLabel && (
-          <div style={{
-            position: "absolute",
-            top: sz + 1,
-            left: "50%", transform: "translateX(-50%)",
-            fontSize: Math.max(7, Math.round(6.5 * zoom)),
-            color: dotColor,
-            whiteSpace: "nowrap", pointerEvents: "none", zIndex: 20,
-            fontFamily: "monospace",
-            textShadow: "0 0 4px #000, 0 0 4px #000"
-          }}>
-            {parseFloat(p.pileTip).toFixed(1)}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  // ── RemDot: เข็มแก้ไข (diamond) ──
-  const RemDot = ({ remId }) => {
-    const rp = remPiles[remId];
-    if (!rp) return null;
-    const sz = Math.round(10 * zoom);
-    const isSel = selRemPile === remId;
-    let color = rp.s === ST.D ? "#22c55e" : rp.s === ST.X ? "#ef4444" : REM_DOT_COLOR;
-    let bdColor = rp.s === ST.D ? "#16703a" : rp.s === ST.X ? "#8c1c1c" : REM_DOT_BD;
-    let dim = false;
-    if (filter !== "all" && filter !== "rem") dim = true;
-
-    if (depthMode) {
-      const hasTip = rp.pileTip && !isNaN(parseFloat(rp.pileTip));
-      if ((rp.s === ST.D || rp.s === ST.X) && hasTip) {
-        const dc = getDepthColor(rp.pileTip);
-        if (dc) { color = dc; bdColor = dc; }
-      } else if ((rp.s === ST.D || rp.s === ST.X) && !hasTip) {
-        color = "#2a3045"; bdColor = "#333c5a";
-      }
-    }
-
-    const showDepthLabel = depthMode && zoom >= 1.5 && (rp.s === ST.D || rp.s === ST.X) && rp.pileTip;
-
-    return (
-      <div style={{ position: "relative", flexShrink: 0 }}>
-        <div
-          title={`แก้ไข #${remId} (เข็มเดิม #${rp.parentPileId})${rp.pileTip ? ` · Tip: ${rp.pileTip}ม.` : ""}`}
-          onClick={e => { e.stopPropagation(); openRemPile(remId); }}
-          style={{
-            width: sz, height: sz, flexShrink: 0, cursor: "pointer",
-            background: color,
-            border: `1px solid ${isSel ? "#fbbf24" : bdColor}`,
-            boxShadow: isSel ? "0 0 0 2px #fbbf24" : "none",
-            transform: "rotate(45deg)",
-            opacity: dim ? 0.15 : 1,
-            position: "relative", zIndex: isSel ? 10 : 2,
-            transition: "transform .08s", overflow: "visible",
-          }}
-          onMouseEnter={e => { e.currentTarget.style.transform = "rotate(45deg) scale(1.7)"; }}
-          onMouseLeave={e => { e.currentTarget.style.transform = "rotate(45deg) scale(1)"; }}
-        />
-        {showDepthLabel && (
-          <div style={{
-            position: "absolute",
-            top: sz + 3,
-            left: "50%", transform: "translateX(-50%)",
-            fontSize: Math.max(7, Math.round(6.5 * zoom)),
-            color: color,
-            whiteSpace: "nowrap", pointerEvents: "none", zIndex: 20,
-            fontFamily: "monospace",
-            textShadow: "0 0 4px #000, 0 0 4px #000"
-          }}>
-            {parseFloat(rp.pileTip).toFixed(1)}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const Cell = ({ rowId, colIdx, pileIds, rowType }) => {
-    const isF2 = pileIds.length === 2;
-    const horiz = f2IsHorizontal(colIdx, rowType);
-    const isMainRow = rowType !== "inter";
-    const isMainColumn = colIdx % 2 === 0;
-    const isSel = selCell?.rowId === rowId && selCell?.colIdx === colIdx;
-
-    const dotSz = Math.round(12 * zoom);
-    const gap = Math.round(4 * zoom);
-    const pad = Math.round(12 * zoom);
-
-    // หา remGroups สำหรับ cell นี้
-    const cellRemGroups = findRemGroupsForCell(remGroups, pileIds);
-    const hasRem = cellRemGroups.length > 0;
-
-    // คำนวณขนาด cell โดยรวมเข็มแก้ไข
-    let cellW, cellH;
-    if (hasRem) {
-      const remDotSz = Math.round(10 * zoom);
-      const remGap = Math.round(4 * zoom);
-      // ดูทิศทางของ remGroup แรก (cell มักมีแค่ 1 group)
-      const dir = cellRemGroups[0]?.direction || "horizontal";
-      if (dir === "horizontal") {
-        // เข็มแก้ไขอยู่ซ้าย-ขวา
-        const innerW = isF2 ? (horiz ? dotSz * 2 + gap : dotSz) : dotSz;
-        cellW = remDotSz + remGap + innerW + remGap + remDotSz + pad * 2;
-        cellH = isF2 ? (horiz ? dotSz + pad * 2 : dotSz * 2 + gap + pad * 2) : dotSz + pad * 2;
-      } else {
-        // เข็มแก้ไขอยู่บน-ล่าง
-        cellW = isF2 ? (horiz ? dotSz * 2 + gap + pad * 2 : dotSz + pad * 2) : dotSz + pad * 2;
-        const innerH = isF2 ? (!horiz ? dotSz * 2 + gap : dotSz) : dotSz;
-        cellH = remDotSz + remGap + innerH + remGap + remDotSz + pad * 2;
-      }
-    } else {
-      cellW = isF2 ? (horiz ? dotSz * 2 + gap + pad * 2 : dotSz + pad * 2) : dotSz + pad * 2;
-      cellH = isF2 ? (horiz ? dotSz + pad * 2 : dotSz * 2 + gap + pad * 2) : dotSz + pad * 2;
-    }
-
-    // สร้าง remDots สำหรับ render
-    const remDotIds = cellRemGroups.flatMap(g => g.remPileIds || []);
-    const remDirection = cellRemGroups[0]?.direction || "horizontal";
-
-    return (
-      <div
-        title={`${rowId}-${COL_LABELS[colIdx]}: #${pileIds.join(", #")} ${isF2 ? (horiz ? "(F2,C1)" : "(F2,C2)") : ""}`}
-        onClick={() => setSelCell(isSel ? null : { rowId, colIdx, pileIds })}
-        style={{
-          width: cellW, height: cellH, flexShrink: 0,
-          display: "flex",
-          alignItems: "center", justifyContent: "center",
-          position: "relative", cursor: "pointer",
-          background: isSel ? "rgba(251, 191, 36, 0.08)" : "transparent",
-        }}
-      >
-        <div style={{ position: "absolute", left: 0, right: 0, top: "50%", height: 0, borderTop: isMainRow ? "1px solid #2a3045" : "1px dashed #141825", zIndex: 0 }} />
-        <div style={{ position: "absolute", top: 0, bottom: 0, left: "50%", width: 0, borderLeft: isMainColumn ? "1px solid #2a3045" : "1px dashed #141825", zIndex: 0 }} />
-
-        <div style={{
-          display: "flex",
-          flexDirection: hasRem ? (remDirection === "horizontal" ? "row" : "column") : (isF2 && !horiz ? "column" : "row"),
-          gap: hasRem ? Math.round(4 * zoom) : (isF2 ? gap : 0),
-          alignItems: "center",
-          background: "#080a10", padding: 3, borderRadius: 10, zIndex: 1
-        }}>
-          {hasRem && remDotIds[0] && <RemDot remId={remDotIds[0]} />}
-          <div style={{
-            display: "flex", flexDirection: isF2 && !horiz ? "column" : "row", gap: isF2 ? gap : 0,
-            alignItems: "center",
-          }}>
-            {pileIds.map(id => <Dot key={id} id={id} />)}
-          </div>
-          {hasRem && remDotIds[1] && <RemDot remId={remDotIds[1]} />}
-        </div>
-      </div>
-    );
-  };
+  }, [depthStats]);
 
   if (loading) {
     return (
@@ -988,7 +992,15 @@ export default function App() {
     });
   };
 
+  const gridContextValue = useMemo(() => ({
+    piles, remPiles, remGroups,
+    filter, selPile, selRemPile, selCell, setSelCell,
+    searchQ, zoom, depthMode, getDepthColor,
+    openPile, openRemPile,
+  }), [piles, remPiles, remGroups, filter, selPile, selRemPile, selCell, searchQ, zoom, depthMode, getDepthColor, openPile, openRemPile]);
+
   return (
+    <GridContext.Provider value={gridContextValue}>
     <div style={{ fontFamily: "'IBM Plex Mono', monospace", height: "100vh", background: "#080a10", color: "#cdd1e0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sarabun:wght@400;600;700&display=swap');
@@ -1266,15 +1278,9 @@ export default function App() {
         <div style={{ flex: 1, overflow: "auto", padding: "16px 20px" }}>
           <div style={{ display: "inline-block", minWidth: "max-content", paddingRight: "40px", paddingBottom: "40px" }}>
             {(() => {
-              const dotSz = Math.round(12 * zoom);
-              const gap3 = Math.round(4 * zoom);
-              const pad = Math.round(12 * zoom);
-              const cellW = (ci, rowType) => {
-                const horiz = f2IsHorizontal(ci, rowType);
-                return horiz ? (dotSz * 2 + gap3 + pad * 2) : (dotSz + pad * 2);
-              };
-              const LABEL_W = 40;
-              const colSlotW = Array.from({ length: 41 }, (_, ci) => cellW(ci, "edge"));
+              const dotSz = gDotSz;
+              const gap3 = gGap3;
+              const pad = gPad;
 
               return (
                 <div style={{ position: "relative" }}>
@@ -1689,5 +1695,6 @@ export default function App() {
         </div>
       </div>
     </div>
+    </GridContext.Provider>
   );
 }
