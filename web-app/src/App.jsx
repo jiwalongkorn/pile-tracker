@@ -461,6 +461,8 @@ export default function App() {
 
   // ── Depth mode ──
   const [depthMode, setDepthMode] = useState(false);
+  const [depthRangeMaxInput, setDepthRangeMaxInput] = useState(""); // ตื้นสุด (เช่น 0 หรือ -5)
+  const [depthRangeInput, setDepthRangeInput] = useState("");       // ลึกสุด (เช่น -40)
   const canEdit = !!user;
 
   // ── ฟังก์ชันหาแถว/คอลัมน์ของเสาเข็ม ──
@@ -948,21 +950,32 @@ export default function App() {
   }, [zoom]);
 
   // ── getDepthColor (memoized) ──
+  // gradient: blue(ตื้น) → green(กลาง) → red(ลึก)
+  const depthRange = useMemo(() => {
+    const deep = parseFloat(depthRangeInput);
+    const shallow = parseFloat(depthRangeMaxInput);
+    return {
+      min: (!isNaN(deep) && deep < 0) ? deep : (depthStats.hasData ? depthStats.min : null),
+      max: (!isNaN(shallow)) ? shallow : 0,
+    };
+  }, [depthRangeInput, depthRangeMaxInput, depthStats]);
+
   const getDepthColor = useCallback((tipVal) => {
-    if (!depthStats.hasData) return null;
+    if (depthRange.min === null) return null;
     const val = parseFloat(tipVal);
     if (isNaN(val)) return null;
-    const deepest = Math.abs(depthStats.min);
-    if (deepest === 0) return null;
-    const t = Math.min(1, Math.abs(val) / deepest);
+    const rangeSize = Math.abs(depthRange.min - depthRange.max);
+    if (rangeSize === 0) return null;
+    const t = Math.min(1, Math.max(0, (depthRange.max - val) / rangeSize));
+    // blue #3b82f6 → green #22c55e → red #ef4444
     if (t < 0.5) {
       const f = t * 2;
-      return `rgb(${Math.round(234+(34-234)*f)},${Math.round(179+(197-179)*f)},${Math.round(8+(94-8)*f)})`;
+      return `rgb(${Math.round(59+(34-59)*f)},${Math.round(130+(197-130)*f)},${Math.round(246+(94-246)*f)})`;
     } else {
       const f = (t - 0.5) * 2;
       return `rgb(${Math.round(34+(239-34)*f)},${Math.round(197+(68-197)*f)},${Math.round(94+(68-94)*f)})`;
     }
-  }, [depthStats]);
+  }, [depthRange]);
 
   const gridContextValue = useMemo(() => ({
     piles, remPiles, remGroups,
@@ -1261,15 +1274,30 @@ export default function App() {
               style={{ padding: "6px 12px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 12, border: `1px solid ${depthMode ? "#3b82f6" : "#1e2235"}`, background: depthMode ? "#0b1121" : "#0d0f18", color: depthMode ? "#3b82f6" : "#555d7a", fontWeight: depthMode ? 700 : 400 }}>
               📊 ความลึก
             </button>
-            {depthMode && depthStats.hasData && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontFamily: "monospace" }}>
-                <span style={{ color: "#eab308" }}>0ม.</span>
-                <div style={{ width: 50, height: 6, borderRadius: 3, background: "linear-gradient(to right, #eab308, #22c55e, #ef4444)" }} />
-                <span style={{ color: "#3b82f6" }}>{depthStats.min.toFixed(1)}ม.</span>
+            {depthMode && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="number"
+                  placeholder={`${depthRange.max}ม.`}
+                  value={depthRangeMaxInput}
+                  onChange={e => setDepthRangeMaxInput(e.target.value)}
+                  style={{ width: 58, padding: "2px 6px", borderRadius: 4, border: "1px solid #1e4aaa", background: "#080a10", color: "#60a5fa", fontSize: 11, fontFamily: "monospace", outline: "none", textAlign: "right" }}
+                />
+                <div style={{ width: 50, height: 6, borderRadius: 3, background: "linear-gradient(to right, #3b82f6, #22c55e, #ef4444)", flexShrink: 0 }} />
+                <input
+                  type="number"
+                  placeholder={depthRange.min !== null ? `${depthRange.min.toFixed(1)}ม.` : "auto"}
+                  value={depthRangeInput}
+                  onChange={e => setDepthRangeInput(e.target.value)}
+                  style={{ width: 68, padding: "2px 6px", borderRadius: 4, border: "1px solid #7f1d1d", background: "#080a10", color: "#ef4444", fontSize: 11, fontFamily: "monospace", outline: "none" }}
+                />
+                {(depthRangeInput !== "" || depthRangeMaxInput !== "") && (
+                  <button onClick={() => { setDepthRangeInput(""); setDepthRangeMaxInput(""); }}
+                    style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, border: "1px solid #1e2235", background: "transparent", color: "#555d7a", cursor: "pointer" }}>
+                    auto
+                  </button>
+                )}
               </div>
-            )}
-            {depthMode && !depthStats.hasData && (
-              <span style={{ fontSize: 11, color: "#555d7a", fontFamily: "'Sarabun',sans-serif" }}>ยังไม่มีข้อมูลความลึก</span>
             )}
           </div>
         </div>
