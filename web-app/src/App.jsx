@@ -964,6 +964,13 @@ export default function App() {
     }
   }, [depthStats]);
 
+  const gridContextValue = useMemo(() => ({
+    piles, remPiles, remGroups,
+    filter, selPile, selRemPile, selCell, setSelCell,
+    searchQ, zoom, depthMode, getDepthColor,
+    openPile, openRemPile,
+  }), [piles, remPiles, remGroups, filter, selPile, selRemPile, selCell, searchQ, zoom, depthMode, getDepthColor, openPile, openRemPile]);
+
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", background: "#080a10", color: "#cdd1e0", display: "flex", justifyContent: "center", alignItems: "center", fontFamily: "'Sarabun',sans-serif" }}>
@@ -992,13 +999,6 @@ export default function App() {
       id2: "",
     });
   };
-
-  const gridContextValue = useMemo(() => ({
-    piles, remPiles, remGroups,
-    filter, selPile, selRemPile, selCell, setSelCell,
-    searchQ, zoom, depthMode, getDepthColor,
-    openPile, openRemPile,
-  }), [piles, remPiles, remGroups, filter, selPile, selRemPile, selCell, searchQ, zoom, depthMode, getDepthColor, openPile, openRemPile]);
 
   return (
     <GridContext.Provider value={gridContextValue}>
