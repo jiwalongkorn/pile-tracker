@@ -254,6 +254,9 @@ export default function App() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
+
+  // ── Depth mode ──
+  const [depthMode, setDepthMode] = useState(false);
   const canEdit = !!user;
 
   // ── ฟังก์ชันหาแถว/คอลัมน์ของเสาเข็ม ──
@@ -440,6 +443,14 @@ export default function App() {
     const done = vals.filter(p => p.s === ST.D).length;
     return { total, done, pending: total - done };
   }, [remPiles]);
+
+  const depthStats = useMemo(() => {
+    const tips = [...Object.values(piles), ...Object.values(remPiles)]
+      .filter(p => p.s === ST.D && p.pileTip && !isNaN(parseFloat(p.pileTip)))
+      .map(p => parseFloat(p.pileTip));
+    if (!tips.length) return { min: 0, max: 0, hasData: false };
+    return { min: Math.min(...tips), max: Math.max(...tips), hasData: true };
+  }, [piles, remPiles]);
 
   const openPile = (id) => {
     const p = piles[id];
@@ -723,6 +734,22 @@ export default function App() {
     return false;
   };
 
+  const getDepthColor = (tipVal) => {
+    if (!depthStats.hasData) return null;
+    const val = parseFloat(tipVal);
+    if (isNaN(val)) return null;
+    const { min, max } = depthStats;
+    const t = max === min ? 0.5 : (val - max) / (min - max); // 0=ตื้น, 1=ลึก
+    // yellow (#eab308) → green (#22c55e) → blue (#3b82f6)
+    if (t < 0.5) {
+      const f = t * 2;
+      return `rgb(${Math.round(234+(34-234)*f)},${Math.round(179+(197-179)*f)},${Math.round(8+(94-8)*f)})`;
+    } else {
+      const f = (t - 0.5) * 2;
+      return `rgb(${Math.round(34+(59-34)*f)},${Math.round(197+(130-197)*f)},${Math.round(94+(246-94)*f)})`;
+    }
+  };
+
   const Dot = ({ id }) => {
     const p = piles[id];
     let dim = false;
@@ -747,10 +774,20 @@ export default function App() {
       dotColor = ic.dot;
       borderColor = ic.bd;
     }
+    if (depthMode) {
+      if (p.s === ST.D && p.pileTip) {
+        const dc = getDepthColor(p.pileTip);
+        if (dc) { dotColor = dc; borderColor = dc; }
+      } else if (p.s === ST.D && !p.pileTip) {
+        dotColor = "#2a3045"; borderColor = "#333c5a";
+      }
+    }
+
+    const showDepthLabel = depthMode && zoom >= 1.5 && p.s === ST.D && p.pileTip;
 
     return (
       <div
-        title={`#${id}`}
+        title={`#${id}${p.pileTip ? ` · Tip: ${p.pileTip}ม.` : ""}`}
         onClick={e => { e.stopPropagation(); openPile(id); }}
         style={{
           width: sz, height: sz, borderRadius: "50%", flexShrink: 0,
@@ -760,12 +797,27 @@ export default function App() {
           opacity: dim ? 0.1 : 1,
           cursor: "pointer",
           transition: "transform .08s",
-          zIndex: isSel || isSearched ? 10 : 1, position: "relative",
+          zIndex: isSel || isSearched ? 10 : 1, position: "relative", overflow: "visible",
           animation: isSearched ? "glowPulse 1.5s infinite alternate" : "none"
         }}
         onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.7)"; e.currentTarget.style.zIndex = 8; }}
         onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.zIndex = isSel ? 10 : 1; }}
-      />
+      >
+        {showDepthLabel && (
+          <div style={{
+            position: "absolute",
+            top: sz + 1,
+            left: "50%", transform: "translateX(-50%)",
+            fontSize: Math.max(7, Math.round(6.5 * zoom)),
+            color: dotColor,
+            whiteSpace: "nowrap", pointerEvents: "none", zIndex: 20,
+            fontFamily: "monospace",
+            textShadow: "0 0 4px #000, 0 0 4px #000"
+          }}>
+            {parseFloat(p.pileTip).toFixed(1)}
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -1147,12 +1199,35 @@ export default function App() {
             </div>
           ))}
           </div>
-          <div className="search-box" style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto", background: "#0d0f18", padding: "8px 12px", borderRadius: 4, border: "1px solid #1e2235" }}>
-            <span style={{ fontSize: 13, color: "#555d7a", fontFamily: "'Sarabun',sans-serif" }}>🔍 ค้นหาเบอร์:</span>
-            <input
-              className="inp" type="number" placeholder="เช่น 1" value={searchQ} onChange={handleSearch}
-              style={{ width: 90, padding: "2px 6px", background: "transparent", border: "none", borderBottom: "1px solid #333c5a", borderRadius: 0 }}
-            />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <div className="search-box" style={{ display: "flex", alignItems: "center", gap: 6, background: "#0d0f18", padding: "8px 12px", borderRadius: 4, border: "1px solid #1e2235" }}>
+              <span style={{ fontSize: 13, color: "#555d7a", fontFamily: "'Sarabun',sans-serif" }}>🔍 ค้นหาเบอร์:</span>
+              <input
+                className="inp" type="number" placeholder="เช่น 1" value={searchQ} onChange={handleSearch}
+                style={{ width: 90, padding: "2px 6px", background: "transparent", border: "none", borderBottom: "1px solid #333c5a", borderRadius: 0 }}
+              />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <button onClick={() => setZoom(z => Math.max(0.5, parseFloat((z - 0.25).toFixed(2))))}
+                style={{ padding: "5px 10px", borderRadius: 4, border: "1px solid #1e2235", background: "#0d0f18", color: "#8a94b5", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>−</button>
+              <span style={{ fontSize: 11, color: "#555d7a", fontFamily: "monospace", minWidth: 36, textAlign: "center" }}>{Math.round(zoom * 100)}%</span>
+              <button onClick={() => setZoom(z => Math.min(3, parseFloat((z + 0.25).toFixed(2))))}
+                style={{ padding: "5px 10px", borderRadius: 4, border: "1px solid #1e2235", background: "#0d0f18", color: "#8a94b5", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>+</button>
+            </div>
+            <button onClick={() => setDepthMode(v => !v)}
+              style={{ padding: "6px 12px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 12, border: `1px solid ${depthMode ? "#3b82f6" : "#1e2235"}`, background: depthMode ? "#0b1121" : "#0d0f18", color: depthMode ? "#3b82f6" : "#555d7a", fontWeight: depthMode ? 700 : 400 }}>
+              📊 ความลึก
+            </button>
+            {depthMode && depthStats.hasData && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontFamily: "monospace" }}>
+                <span style={{ color: "#eab308" }}>{depthStats.max.toFixed(1)}ม.</span>
+                <div style={{ width: 50, height: 6, borderRadius: 3, background: "linear-gradient(to right, #eab308, #22c55e, #3b82f6)" }} />
+                <span style={{ color: "#3b82f6" }}>{depthStats.min.toFixed(1)}ม.</span>
+              </div>
+            )}
+            {depthMode && !depthStats.hasData && (
+              <span style={{ fontSize: 11, color: "#555d7a", fontFamily: "'Sarabun',sans-serif" }}>ยังไม่มีข้อมูลความลึก</span>
+            )}
           </div>
         </div>
       </div>
