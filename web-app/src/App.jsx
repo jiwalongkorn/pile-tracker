@@ -741,13 +741,13 @@ export default function App() {
     const deepest = Math.abs(depthStats.min); // ลึกที่สุด = ติดลบมากที่สุด
     if (deepest === 0) return null;
     const t = Math.min(1, Math.abs(val) / deepest); // 0=ผิวดิน (0ม.), 1=ลึกที่สุด
-    // yellow (#eab308) → green (#22c55e) → blue (#3b82f6)
+    // yellow (#eab308) → green (#22c55e) → red (#ef4444)
     if (t < 0.5) {
       const f = t * 2;
       return `rgb(${Math.round(234+(34-234)*f)},${Math.round(179+(197-179)*f)},${Math.round(8+(94-8)*f)})`;
     } else {
       const f = (t - 0.5) * 2;
-      return `rgb(${Math.round(34+(59-34)*f)},${Math.round(197+(130-197)*f)},${Math.round(94+(246-94)*f)})`;
+      return `rgb(${Math.round(34+(239-34)*f)},${Math.round(197+(68-197)*f)},${Math.round(94+(68-94)*f)})`;
     }
   };
 
@@ -1251,7 +1251,7 @@ export default function App() {
             {depthMode && depthStats.hasData && (
               <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontFamily: "monospace" }}>
                 <span style={{ color: "#eab308" }}>0ม.</span>
-                <div style={{ width: 50, height: 6, borderRadius: 3, background: "linear-gradient(to right, #eab308, #22c55e, #3b82f6)" }} />
+                <div style={{ width: 50, height: 6, borderRadius: 3, background: "linear-gradient(to right, #eab308, #22c55e, #ef4444)" }} />
                 <span style={{ color: "#3b82f6" }}>{depthStats.min.toFixed(1)}ม.</span>
               </div>
             )}
