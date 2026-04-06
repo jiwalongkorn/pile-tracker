@@ -738,8 +738,9 @@ export default function App() {
     if (!depthStats.hasData) return null;
     const val = parseFloat(tipVal);
     if (isNaN(val)) return null;
-    const { min, max } = depthStats;
-    const t = max === min ? 0.5 : (val - max) / (min - max); // 0=ตื้น, 1=ลึก
+    const deepest = Math.abs(depthStats.min); // ลึกที่สุด = ติดลบมากที่สุด
+    if (deepest === 0) return null;
+    const t = Math.min(1, Math.abs(val) / deepest); // 0=ผิวดิน (0ม.), 1=ลึกที่สุด
     // yellow (#eab308) → green (#22c55e) → blue (#3b82f6)
     if (t < 0.5) {
       const f = t * 2;
@@ -1220,7 +1221,7 @@ export default function App() {
             </button>
             {depthMode && depthStats.hasData && (
               <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontFamily: "monospace" }}>
-                <span style={{ color: "#eab308" }}>{depthStats.max.toFixed(1)}ม.</span>
+                <span style={{ color: "#eab308" }}>0ม.</span>
                 <div style={{ width: 50, height: 6, borderRadius: 3, background: "linear-gradient(to right, #eab308, #22c55e, #3b82f6)" }} />
                 <span style={{ color: "#3b82f6" }}>{depthStats.min.toFixed(1)}ม.</span>
               </div>
