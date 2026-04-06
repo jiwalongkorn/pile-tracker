@@ -738,8 +738,9 @@ export default function App() {
     if (!depthStats.hasData) return null;
     const val = parseFloat(tipVal);
     if (isNaN(val)) return null;
-    const { min, max } = depthStats;
-    const t = max === min ? 0.5 : (val - max) / (min - max); // 0=ตื้น, 1=ลึก
+    const deepest = Math.abs(depthStats.min); // ลึกที่สุด = ติดลบมากที่สุด
+    if (deepest === 0) return null;
+    const t = Math.min(1, Math.abs(val) / deepest); // 0=ผิวดิน (0ม.), 1=ลึกที่สุด
     // yellow (#eab308) → green (#22c55e) → blue (#3b82f6)
     if (t < 0.5) {
       const f = t * 2;
@@ -775,15 +776,16 @@ export default function App() {
       borderColor = ic.bd;
     }
     if (depthMode) {
-      if (p.s === ST.D && p.pileTip) {
+      const hasTip = p.pileTip && !isNaN(parseFloat(p.pileTip));
+      if ((p.s === ST.D || p.s === ST.X) && hasTip) {
         const dc = getDepthColor(p.pileTip);
         if (dc) { dotColor = dc; borderColor = dc; }
-      } else if (p.s === ST.D && !p.pileTip) {
+      } else if ((p.s === ST.D || p.s === ST.X) && !hasTip) {
         dotColor = "#2a3045"; borderColor = "#333c5a";
       }
     }
 
-    const showDepthLabel = depthMode && zoom >= 1.5 && p.s === ST.D && p.pileTip;
+    const showDepthLabel = depthMode && zoom >= 1.5 && (p.s === ST.D || p.s === ST.X) && p.pileTip;
 
     return (
       <div
@@ -827,28 +829,56 @@ export default function App() {
     if (!rp) return null;
     const sz = Math.round(10 * zoom);
     const isSel = selRemPile === remId;
-    const color = rp.s === ST.D ? "#22c55e" : rp.s === ST.X ? "#ef4444" : REM_DOT_COLOR;
-    const bdColor = rp.s === ST.D ? "#16703a" : rp.s === ST.X ? "#8c1c1c" : REM_DOT_BD;
+    let color = rp.s === ST.D ? "#22c55e" : rp.s === ST.X ? "#ef4444" : REM_DOT_COLOR;
+    let bdColor = rp.s === ST.D ? "#16703a" : rp.s === ST.X ? "#8c1c1c" : REM_DOT_BD;
     let dim = false;
     if (filter !== "all" && filter !== "rem") dim = true;
 
+    if (depthMode) {
+      const hasTip = rp.pileTip && !isNaN(parseFloat(rp.pileTip));
+      if ((rp.s === ST.D || rp.s === ST.X) && hasTip) {
+        const dc = getDepthColor(rp.pileTip);
+        if (dc) { color = dc; bdColor = dc; }
+      } else if ((rp.s === ST.D || rp.s === ST.X) && !hasTip) {
+        color = "#2a3045"; bdColor = "#333c5a";
+      }
+    }
+
+    const showDepthLabel = depthMode && zoom >= 1.5 && (rp.s === ST.D || rp.s === ST.X) && rp.pileTip;
+
     return (
-      <div
-        title={`แก้ไข #${remId} (เข็มเดิม #${rp.parentPileId})`}
-        onClick={e => { e.stopPropagation(); openRemPile(remId); }}
-        style={{
-          width: sz, height: sz, flexShrink: 0, cursor: "pointer",
-          background: color,
-          border: `1px solid ${isSel ? "#fbbf24" : bdColor}`,
-          boxShadow: isSel ? "0 0 0 2px #fbbf24" : "none",
-          transform: "rotate(45deg)",
-          opacity: dim ? 0.15 : 1,
-          position: "relative", zIndex: isSel ? 10 : 2,
-          transition: "transform .08s",
-        }}
-        onMouseEnter={e => { e.currentTarget.style.transform = "rotate(45deg) scale(1.7)"; }}
-        onMouseLeave={e => { e.currentTarget.style.transform = "rotate(45deg) scale(1)"; }}
-      />
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <div
+          title={`แก้ไข #${remId} (เข็มเดิม #${rp.parentPileId})${rp.pileTip ? ` · Tip: ${rp.pileTip}ม.` : ""}`}
+          onClick={e => { e.stopPropagation(); openRemPile(remId); }}
+          style={{
+            width: sz, height: sz, flexShrink: 0, cursor: "pointer",
+            background: color,
+            border: `1px solid ${isSel ? "#fbbf24" : bdColor}`,
+            boxShadow: isSel ? "0 0 0 2px #fbbf24" : "none",
+            transform: "rotate(45deg)",
+            opacity: dim ? 0.15 : 1,
+            position: "relative", zIndex: isSel ? 10 : 2,
+            transition: "transform .08s", overflow: "visible",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.transform = "rotate(45deg) scale(1.7)"; }}
+          onMouseLeave={e => { e.currentTarget.style.transform = "rotate(45deg) scale(1)"; }}
+        />
+        {showDepthLabel && (
+          <div style={{
+            position: "absolute",
+            top: sz + 3,
+            left: "50%", transform: "translateX(-50%)",
+            fontSize: Math.max(7, Math.round(6.5 * zoom)),
+            color: color,
+            whiteSpace: "nowrap", pointerEvents: "none", zIndex: 20,
+            fontFamily: "monospace",
+            textShadow: "0 0 4px #000, 0 0 4px #000"
+          }}>
+            {parseFloat(rp.pileTip).toFixed(1)}
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -1220,7 +1250,7 @@ export default function App() {
             </button>
             {depthMode && depthStats.hasData && (
               <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontFamily: "monospace" }}>
-                <span style={{ color: "#eab308" }}>{depthStats.max.toFixed(1)}ม.</span>
+                <span style={{ color: "#eab308" }}>0ม.</span>
                 <div style={{ width: 50, height: 6, borderRadius: 3, background: "linear-gradient(to right, #eab308, #22c55e, #3b82f6)" }} />
                 <span style={{ color: "#3b82f6" }}>{depthStats.min.toFixed(1)}ม.</span>
               </div>
