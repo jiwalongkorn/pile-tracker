@@ -407,6 +407,12 @@ function findRemGroupForPile(remGroups, pileId) {
 }
 
 // ── หา remGroup จาก cell (ตรวจทุก pile ใน cell) ──
+function f2IsHorizontal(ci, rowType) {
+  if (ci === 0 || ci === 40) return true;
+  if ((ci === 16 || ci === 24) && rowType === "mid") return true;
+  return false;
+}
+
 function findRemGroupsForCell(remGroups, pileIds) {
   const groups = [];
   for (const pid of pileIds) {
@@ -926,11 +932,6 @@ export default function App() {
     }
   };
 
-  const f2IsHorizontal = (ci, rowType) => {
-    if (ci === 0 || ci === 40) return true;
-    if ((ci === 16 || ci === 24) && rowType === "mid") return true;
-    return false;
-  };
 
   // ── Grid layout (memoized, recalculate only when zoom changes) ──
   const LABEL_W = 40;
