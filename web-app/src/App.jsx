@@ -28,7 +28,7 @@ const Dot = memo(({ id }) => {
   const sz = Math.round(12 * zoom);
 
   let dotColor = ST_DOT[p.s];
-  let borderColor = p.s === ST.D ? "#16703a" : p.s === ST.X ? "#8c1c1c" : "#272c42";
+  let borderColor = p.s === ST.D ? "#16703a" : p.s === ST.X ? "#8c1c1c" : "var(--c-border-b)";
   if (p.s === ST.X) {
     const ic = ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR];
     dotColor = ic.dot;
@@ -40,7 +40,7 @@ const Dot = memo(({ id }) => {
       const dc = getDepthColor(p.pileTip);
       if (dc) { dotColor = dc; borderColor = dc; }
     } else if ((p.s === ST.D || p.s === ST.X) && !hasTip) {
-      dotColor = "#2a3045"; borderColor = "#333c5a";
+      dotColor = "var(--c-dot-dim)"; borderColor = "var(--c-border-b)";
     }
   }
 
@@ -96,7 +96,7 @@ const RemDot = memo(({ remId }) => {
       const dc = getDepthColor(rp.pileTip);
       if (dc) { color = dc; bdColor = dc; }
     } else if ((rp.s === ST.D || rp.s === ST.X) && !hasTip) {
-      color = "#2a3045"; bdColor = "#333c5a";
+      color = "var(--c-dot-dim)"; bdColor = "var(--c-border-b)";
     }
   }
 
@@ -183,14 +183,14 @@ const Cell = memo(({ rowId, colIdx, pileIds, rowType }) => {
         background: isSel ? "rgba(251, 191, 36, 0.08)" : "transparent",
       }}
     >
-      <div style={{ position: "absolute", left: 0, right: 0, top: "50%", height: 0, borderTop: isMainRow ? "1px solid #2a3045" : "1px dashed #141825", zIndex: 0 }} />
-      <div style={{ position: "absolute", top: 0, bottom: 0, left: "50%", width: 0, borderLeft: isMainColumn ? "1px solid #2a3045" : "1px dashed #141825", zIndex: 0 }} />
+      <div style={{ position: "absolute", left: 0, right: 0, top: "50%", height: 0, borderTop: isMainRow ? "1px solid var(--c-dot-dim)" : "1px dashed var(--c-bg-hover)", zIndex: 0 }} />
+      <div style={{ position: "absolute", top: 0, bottom: 0, left: "50%", width: 0, borderLeft: isMainColumn ? "1px solid var(--c-dot-dim)" : "1px dashed var(--c-bg-hover)", zIndex: 0 }} />
       <div style={{
         display: "flex",
         flexDirection: hasRem ? (remDirection === "horizontal" ? "row" : "column") : (isF2 && !horiz ? "column" : "row"),
         gap: hasRem ? Math.round(4 * zoom) : (isF2 ? gap : 0),
         alignItems: "center",
-        background: "#080a10", padding: 3, borderRadius: 10, zIndex: 1
+        background: "var(--c-bg)", padding: 3, borderRadius: 10, zIndex: 1
       }}>
         {hasRem && remDotIds[0] && <RemDot remId={remDotIds[0]} />}
         <div style={{ display: "flex", flexDirection: isF2 && !horiz ? "column" : "row", gap: isF2 ? gap : 0, alignItems: "center" }}>
@@ -348,9 +348,9 @@ const GRID_DATA = {
 const TOTAL = 1111;
 const ST = { P: "p", D: "d", X: "x" };
 const ST_TH = { p: "ยังไม่กด", d: "กดแล้ว", x: "มีปัญหา" };
-const ST_BG = { p: "#141620", d: "#0b2117", x: "#210b0b" };
-const ST_BD = { p: "#272c42", d: "#16703a", x: "#8c1c1c" };
-const ST_DOT = { p: "#303654", d: "#22c55e", x: "#ef4444" };
+const ST_BG = { p: "var(--c-bg-hover)", d: "#0b2117", x: "#210b0b" };
+const ST_BD = { p: "var(--c-border-b)", d: "#16703a", x: "#8c1c1c" };
+const ST_DOT = { p: "var(--c-dot-dim)", d: "#22c55e", x: "#ef4444" };
 
 // ── สีแยกประเภทปัญหา (4 สี) ──
 const ISSUE_COLORS = {
@@ -463,6 +463,7 @@ export default function App() {
   const [depthMode, setDepthMode] = useState(false);
   const [depthRangeMaxInput, setDepthRangeMaxInput] = useState(""); // ตื้นสุด (เช่น 0 หรือ -5)
   const [depthRangeInput, setDepthRangeInput] = useState("");       // ลึกสุด (เช่น -40)
+  const [lightMode, setLightMode] = useState(() => localStorage.getItem("theme") === "light");
   const canEdit = !!user;
 
   // ── ฟังก์ชันหาแถว/คอลัมน์ของเสาเข็ม ──
@@ -986,7 +987,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: "100vh", background: "#080a10", color: "#cdd1e0", display: "flex", justifyContent: "center", alignItems: "center", fontFamily: "'Sarabun',sans-serif" }}>
+      <div style={{ minHeight: "100vh", background: lightMode ? '#f0f2f8' : '#080a10', color: lightMode ? '#1a1d2e' : '#cdd1e0', display: "flex", justifyContent: "center", alignItems: "center", fontFamily: "'Sarabun',sans-serif" }}>
         <div style={{ textAlign: "center" }}>
           <div style={{ width: 40, height: 40, border: "3px solid #16703a", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite", margin: "0 auto 15px" }} />
           กำลังซิงค์ข้อมูลเสาเข็ม...
@@ -1015,23 +1016,37 @@ export default function App() {
 
   return (
     <GridContext.Provider value={gridContextValue}>
-    <div style={{ fontFamily: "'IBM Plex Mono', monospace", height: "100vh", background: "#080a10", color: "#cdd1e0", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div style={{ fontFamily: "'IBM Plex Mono', monospace", height: "100vh", background: "var(--c-bg)", color: "var(--c-text)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <style>{`
+        :root {
+          --c-bg: ${lightMode ? '#f0f2f8' : '#080a10'};
+          --c-bg-h: ${lightMode ? '#ffffff' : '#060810'};
+          --c-bg-card: ${lightMode ? '#f5f7fc' : '#0d0f18'};
+          --c-bg-hover: ${lightMode ? '#e4e8f5' : '#141825'};
+          --c-border-s: ${lightMode ? '#dde1ef' : '#111420'};
+          --c-border: ${lightMode ? '#c5cce8' : '#1e2235'};
+          --c-border-b: ${lightMode ? '#9aa3c8' : '#333c5a'};
+          --c-text-f: ${lightMode ? '#a8b0cc' : '#252c42'};
+          --c-text-m: ${lightMode ? '#6a74a0' : '#555d7a'};
+          --c-text-2: ${lightMode ? '#464f75' : '#8a94b5'};
+          --c-text: ${lightMode ? '#1a1d2e' : '#cdd1e0'};
+          --c-dot-dim: ${lightMode ? '#b0bbd8' : '#2a3045'};
+        }
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Sarabun:wght@400;600;700&display=swap');
         *{box-sizing:border-box;margin:0;padding:0}
         ::-webkit-scrollbar{width:5px;height:5px}
-        ::-webkit-scrollbar-track{background:#0d0f18}
-        ::-webkit-scrollbar-thumb{background:#1e2235;border-radius:3px}
-        .pill{padding:6px 12px;border-radius:3px;border:1px solid #1e2235;background:transparent;color:#555d7a;cursor:pointer;font-size:12px;font-family:'IBM Plex Mono',monospace;transition:all .15s}
-        .pill.on{background:#141825;color:#cdd1e0;border-color:#333c5a}
-        .pill:hover{color:#cdd1e0}
-        .inp{background:#080a10;border:1px solid #1e2235;border-radius:3px;color:#cdd1e0;padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:16px;width:100%;outline:none}
+        ::-webkit-scrollbar-track{background:var(--c-bg-card)}
+        ::-webkit-scrollbar-thumb{background:var(--c-border);border-radius:3px}
+        .pill{padding:6px 12px;border-radius:3px;border:1px solid var(--c-border);background:transparent;color:var(--c-text-m);cursor:pointer;font-size:12px;font-family:'IBM Plex Mono',monospace;transition:all .15s}
+        .pill.on{background:var(--c-bg-hover);color:var(--c-text);border-color:var(--c-border-b)}
+        .pill:hover{color:var(--c-text)}
+        .inp{background:var(--c-bg);border:1px solid var(--c-border);border-radius:3px;color:var(--c-text);padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:16px;width:100%;outline:none}
         .inp:focus{border-color:#16703a}
 
         .main-content { flex: 1; display: flex; flex-direction: row; overflow: hidden; position: relative; }
-        .controls-bar { border-bottom: 1px solid #111420; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; flex-wrap: wrap; justify-content: space-between; }
+        .controls-bar { border-bottom: 1px solid var(--c-border-s); padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; flex-wrap: wrap; justify-content: space-between; }
         .backdrop { display: none; }
-        .side-panel { width: 340px; border-left: 1px solid #111420; background: #060810; display: flex; flex-direction: column; flex-shrink: 0; z-index: 10; }
+        .side-panel { width: 340px; border-left: 1px solid var(--c-border-s); background: var(--c-bg-h); display: flex; flex-direction: column; flex-shrink: 0; z-index: 10; }
         .mobile-drag-handle { display: none; }
 
         @media (max-width: 768px) {
@@ -1049,9 +1064,9 @@ export default function App() {
           .search-box { width: 100%; margin-left: 0 !important; margin-top: 4px; justify-content: space-between; }
           .backdrop { display: block; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(2px); z-index: 998; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
           .backdrop.open { opacity: 1; pointer-events: auto; }
-          .side-panel { position: absolute; bottom: 0; left: 0; right: 0; width: 100%; height: auto; max-height: 85vh; border-left: none; border-top: 1px solid #2a3045; border-radius: 20px 20px 0 0; box-shadow: 0 -10px 30px rgba(0,0,0,0.8); z-index: 999; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1); }
+          .side-panel { position: absolute; bottom: 0; left: 0; right: 0; width: 100%; height: auto; max-height: 85vh; border-left: none; border-top: 1px solid var(--c-dot-dim); border-radius: 20px 20px 0 0; box-shadow: 0 -10px 30px rgba(0,0,0,0.8); z-index: 999; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1); }
           .side-panel.open { transform: translateY(0); }
-          .mobile-drag-handle { display: block; width: 40px; height: 5px; background: #333c5a; border-radius: 3px; margin: 12px auto 5px; }
+          .mobile-drag-handle { display: block; width: 40px; height: 5px; background: var(--c-border-b); border-radius: 3px; margin: 12px auto 5px; }
         }
 
         @keyframes slideIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
@@ -1062,12 +1077,12 @@ export default function App() {
       {/* Settings Dialog */}
       {showApiKeyDialog && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div style={{ background: "#0d0f18", border: "1px solid #1e2235", borderRadius: 8, padding: 24, width: "100%", maxWidth: 420, fontFamily: "'Sarabun',sans-serif" }}>
-            <div style={{ fontWeight: 700, fontSize: 18, color: "#cdd1e0", marginBottom: 16 }}>⚙️ ตั้งค่า</div>
+          <div style={{ background: "var(--c-bg-card)", border: "1px solid var(--c-border)", borderRadius: 8, padding: 24, width: "100%", maxWidth: 420, fontFamily: "'Sarabun',sans-serif" }}>
+            <div style={{ fontWeight: 700, fontSize: 18, color: "var(--c-text)", marginBottom: 16 }}>⚙️ ตั้งค่า</div>
 
             {/* Gemini API Key */}
-            <div style={{ fontWeight: 600, fontSize: 14, color: "#cdd1e0", marginBottom: 6 }}>🔑 Gemini API Key</div>
-            <div style={{ fontSize: 11, color: "#555d7a", marginBottom: 8, lineHeight: 1.6 }}>
+            <div style={{ fontWeight: 600, fontSize: 14, color: "var(--c-text)", marginBottom: 6 }}>🔑 Gemini API Key</div>
+            <div style={{ fontSize: 11, color: "var(--c-text-m)", marginBottom: 8, lineHeight: 1.6 }}>
               รับ API Key ฟรีได้ที่{" "}
               <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style={{ color: "#a855f7" }}>
                 aistudio.google.com/apikey
@@ -1084,8 +1099,8 @@ export default function App() {
             />
 
             {/* Google Drive Script URL */}
-            <div style={{ fontWeight: 600, fontSize: 14, color: "#cdd1e0", marginBottom: 6 }}>📁 Google Drive Script URL</div>
-            <div style={{ fontSize: 11, color: "#555d7a", marginBottom: 8, lineHeight: 1.6 }}>
+            <div style={{ fontWeight: 600, fontSize: 14, color: "var(--c-text)", marginBottom: 6 }}>📁 Google Drive Script URL</div>
+            <div style={{ fontSize: 11, color: "var(--c-text-m)", marginBottom: 8, lineHeight: 1.6 }}>
               สำหรับอัพโหลดรูปถ่ายลง Google Drive (ไม่ใส่ = ไม่เก็บรูป)
             </div>
             <input
@@ -1097,7 +1112,7 @@ export default function App() {
               style={{ width: "100%", marginBottom: 16, fontSize: 13 }}
             />
 
-            <div style={{ fontSize: 10, color: "#555d7a", marginBottom: 12 }}>ตั้งค่าครั้งเดียว ใช้ได้ทุกเครื่อง (เก็บใน cloud)</div>
+            <div style={{ fontSize: 10, color: "var(--c-text-m)", marginBottom: 12 }}>ตั้งค่าครั้งเดียว ใช้ได้ทุกเครื่อง (เก็บใน cloud)</div>
 
             <div style={{ display: "flex", gap: 8 }}>
               <button
@@ -1111,7 +1126,7 @@ export default function App() {
               >{canEdit ? "บันทึก" : "🔒 ต้องล็อกอินก่อน"}</button>
               <button
                 onClick={() => setShowApiKeyDialog(false)}
-                style={{ padding: "10px 14px", borderRadius: 4, border: "1px solid #1e2235", background: "transparent", color: "#555d7a", cursor: "pointer", fontSize: 13 }}
+                style={{ padding: "10px 14px", borderRadius: 4, border: "1px solid var(--c-border)", background: "transparent", color: "var(--c-text-m)", cursor: "pointer", fontSize: 13 }}
               >ยกเลิก</button>
             </div>
           </div>
@@ -1121,11 +1136,11 @@ export default function App() {
       {/* Login Dialog */}
       {showLoginDialog && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div style={{ background: "#0d0f18", border: "1px solid #1e2235", borderRadius: 8, padding: 24, width: "100%", maxWidth: 380, fontFamily: "'Sarabun',sans-serif" }}>
-            <div style={{ fontWeight: 700, fontSize: 18, color: "#cdd1e0", marginBottom: 16 }}>🔒 เข้าสู่ระบบ</div>
-            <div style={{ fontSize: 12, color: "#555d7a", marginBottom: 12 }}>เข้าสู่ระบบเพื่อแก้ไขข้อมูล</div>
+          <div style={{ background: "var(--c-bg-card)", border: "1px solid var(--c-border)", borderRadius: 8, padding: 24, width: "100%", maxWidth: 380, fontFamily: "'Sarabun',sans-serif" }}>
+            <div style={{ fontWeight: 700, fontSize: 18, color: "var(--c-text)", marginBottom: 16 }}>🔒 เข้าสู่ระบบ</div>
+            <div style={{ fontSize: 12, color: "var(--c-text-m)", marginBottom: 12 }}>เข้าสู่ระบบเพื่อแก้ไขข้อมูล</div>
 
-            <div style={{ fontSize: 12, color: "#8a94b5", marginBottom: 4 }}>อีเมล</div>
+            <div style={{ fontSize: 12, color: "var(--c-text-2)", marginBottom: 4 }}>อีเมล</div>
             <input
               className="inp"
               type="email"
@@ -1136,7 +1151,7 @@ export default function App() {
               autoFocus
             />
 
-            <div style={{ fontSize: 12, color: "#8a94b5", marginBottom: 4 }}>รหัสผ่าน</div>
+            <div style={{ fontSize: 12, color: "var(--c-text-2)", marginBottom: 4 }}>รหัสผ่าน</div>
             <input
               className="inp"
               type="password"
@@ -1159,7 +1174,7 @@ export default function App() {
               >{loginLoading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}</button>
               <button
                 onClick={() => { setShowLoginDialog(false); setLoginError(""); setLoginPassword(""); }}
-                style={{ padding: "10px 14px", borderRadius: 4, border: "1px solid #1e2235", background: "transparent", color: "#555d7a", cursor: "pointer", fontSize: 13 }}
+                style={{ padding: "10px 14px", borderRadius: 4, border: "1px solid var(--c-border)", background: "transparent", color: "var(--c-text-m)", cursor: "pointer", fontSize: 13 }}
               >ยกเลิก</button>
             </div>
           </div>
@@ -1167,11 +1182,11 @@ export default function App() {
       )}
 
       {/* HEADER */}
-      <div className="app-header" style={{ background: "#060810", borderBottom: "1px solid #111420", padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+      <div className="app-header" style={{ background: "var(--c-bg-h)", borderBottom: "1px solid var(--c-border-s)", padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
         <div style={{ width: 28, height: 28, background: "linear-gradient(135deg,#0b2117,#16703a)", borderRadius: 4, display: "grid", placeItems: "center", fontSize: 13 }}>⬛</div>
         <div style={{ minWidth: 0 }}>
           <div className="app-title" style={{ fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 16, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>ติดตามการกดเสาเข็ม (Blueprint)</div>
-          <div className="app-subtitle" style={{ fontSize: 9, color: "#1e2235", letterSpacing: 3 }}>GRID A–M × 1–21 · F1/F2 · 1,111 PILES</div>
+          <div className="app-subtitle" style={{ fontSize: 9, color: "var(--c-border)", letterSpacing: 3 }}>GRID A–M × 1–21 · F1/F2 · 1,111 PILES</div>
         </div>
         <div className="header-actions" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
           <button
@@ -1180,13 +1195,13 @@ export default function App() {
             style={{
               display: "flex", alignItems: "center", gap: 6,
               padding: "7px 14px", borderRadius: 4,
-              border: "1px solid #1e2235", background: "#0d0f18",
-              color: "#8a94b5", cursor: "pointer",
+              border: "1px solid var(--c-border)", background: "var(--c-bg-card)",
+              color: "var(--c-text-2)", cursor: "pointer",
               fontFamily: "'Sarabun',sans-serif", fontSize: 13, fontWeight: 600,
               transition: "all .15s",
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = "#141825"; e.currentTarget.style.borderColor = "#16703a"; e.currentTarget.style.color = "#22c55e"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "#0d0f18"; e.currentTarget.style.borderColor = "#1e2235"; e.currentTarget.style.color = "#8a94b5"; }}
+            onMouseEnter={e => { e.currentTarget.style.background = "var(--c-bg-hover)"; e.currentTarget.style.borderColor = "#16703a"; e.currentTarget.style.color = "#22c55e"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "var(--c-bg-card)"; e.currentTarget.style.borderColor = "var(--c-border)"; e.currentTarget.style.color = "var(--c-text-2)"; }}
           >
             📥 Export Excel
           </button>
@@ -1201,16 +1216,25 @@ export default function App() {
             style={{
               display: "flex", alignItems: "center", gap: 6,
               padding: "7px 14px", borderRadius: 4,
-              border: "1px solid #1e2235", background: ocrLoading ? "#141825" : "#0d0f18",
-              color: ocrLoading ? "#555d7a" : "#a855f7", cursor: ocrLoading ? "wait" : "pointer",
+              border: "1px solid var(--c-border)", background: ocrLoading ? "var(--c-bg-hover)" : "var(--c-bg-card)",
+              color: ocrLoading ? "var(--c-text-m)" : "#a855f7", cursor: ocrLoading ? "wait" : "pointer",
               fontFamily: "'Sarabun',sans-serif", fontSize: 13, fontWeight: 600,
               transition: "all .15s",
             }}
-            onMouseEnter={e => { if (!ocrLoading) { e.currentTarget.style.background = "#141825"; e.currentTarget.style.borderColor = "#7c3aed"; }}}
-            onMouseLeave={e => { e.currentTarget.style.background = ocrLoading ? "#141825" : "#0d0f18"; e.currentTarget.style.borderColor = "#1e2235"; }}
+            onMouseEnter={e => { if (!ocrLoading) { e.currentTarget.style.background = "var(--c-bg-hover)"; e.currentTarget.style.borderColor = "#7c3aed"; }}}
+            onMouseLeave={e => { e.currentTarget.style.background = ocrLoading ? "var(--c-bg-hover)" : "var(--c-bg-card)"; e.currentTarget.style.borderColor = "var(--c-border)"; }}
           >
             {ocrLoading ? "AI กำลังอ่าน..." : "📷 สแกน"}
           </button>
+          <button
+            onClick={() => {
+              const next = !lightMode;
+              setLightMode(next);
+              localStorage.setItem("theme", next ? "light" : "dark");
+            }}
+            title={lightMode ? "สลับโหมดมืด" : "สลับโหมดสว่าง"}
+            style={{ background: "none", border: "none", color: "var(--c-text-2)", cursor: "pointer", fontSize: 18, padding: "4px 6px" }}
+          >{lightMode ? "🌙" : "☀️"}</button>
           <button
             onClick={() => { setApiKeyInput(geminiKey); setDriveUrlInput(driveScriptUrl); setShowApiKeyDialog(true); }}
             title="ตั้งค่า Gemini API Key"
@@ -1234,7 +1258,7 @@ export default function App() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", animation: "pulse 2s infinite" }} />
-            <span style={{ fontSize: 9, color: "#1e2235" }}>LIVE</span>
+            <span style={{ fontSize: 9, color: "var(--c-border)" }}>LIVE</span>
           </div>
         </div>
       </div>
@@ -1243,35 +1267,35 @@ export default function App() {
         <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
           <div className="stat-row" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {[
-            { l: "ทั้งหมด", v: TOTAL, c: "#cdd1e0" },
+            { l: "ทั้งหมด", v: TOTAL, c: "var(--c-text)" },
             { l: "กดแล้ว", v: stats.done, c: "#22c55e" },
-            { l: "ยังไม่กด", v: stats.pending, c: "#333c5a" },
+            { l: "ยังไม่กด", v: stats.pending, c: "var(--c-border-b)" },
             { l: "มีปัญหา", v: stats.issue, c: "#ef4444" },
             ...(remStats.total > 0 ? [{ l: "แก้ไข", v: remStats.total, c: REM_DOT_COLOR }] : []),
           ].map(({ l, v, c }) => (
-            <div key={l} className="stat-box" style={{ background: "#0d0f18", border: "1px solid #111420", borderRadius: 4, padding: "6px 14px", flex: 1, textAlign: "center" }}>
-              <div className="stat-label" style={{ fontSize: 9, color: "#252c42", fontFamily: "'Sarabun',sans-serif" }}>{l}</div>
+            <div key={l} className="stat-box" style={{ background: "var(--c-bg-card)", border: "1px solid var(--c-border-s)", borderRadius: 4, padding: "6px 14px", flex: 1, textAlign: "center" }}>
+              <div className="stat-label" style={{ fontSize: 9, color: "var(--c-text-f)", fontFamily: "'Sarabun',sans-serif" }}>{l}</div>
               <div className="stat-value" style={{ fontSize: 18, fontWeight: 600, color: c }}>{v.toLocaleString()}</div>
             </div>
           ))}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <div className="search-box" style={{ display: "flex", alignItems: "center", gap: 6, background: "#0d0f18", padding: "8px 12px", borderRadius: 4, border: "1px solid #1e2235" }}>
-              <span style={{ fontSize: 13, color: "#555d7a", fontFamily: "'Sarabun',sans-serif" }}>🔍 ค้นหาเบอร์:</span>
+            <div className="search-box" style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--c-bg-card)", padding: "8px 12px", borderRadius: 4, border: "1px solid var(--c-border)" }}>
+              <span style={{ fontSize: 13, color: "var(--c-text-m)", fontFamily: "'Sarabun',sans-serif" }}>🔍 ค้นหาเบอร์:</span>
               <input
                 className="inp" type="number" placeholder="เช่น 1" value={searchQ} onChange={handleSearch}
-                style={{ width: 90, padding: "2px 6px", background: "transparent", border: "none", borderBottom: "1px solid #333c5a", borderRadius: 0 }}
+                style={{ width: 90, padding: "2px 6px", background: "transparent", border: "none", borderBottom: "1px solid var(--c-border-b)", borderRadius: 0 }}
               />
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <button onClick={() => setZoom(z => Math.max(0.5, parseFloat((z - 0.25).toFixed(2))))}
-                style={{ padding: "5px 10px", borderRadius: 4, border: "1px solid #1e2235", background: "#0d0f18", color: "#8a94b5", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>−</button>
-              <span style={{ fontSize: 11, color: "#555d7a", fontFamily: "monospace", minWidth: 36, textAlign: "center" }}>{Math.round(zoom * 100)}%</span>
+                style={{ padding: "5px 10px", borderRadius: 4, border: "1px solid var(--c-border)", background: "var(--c-bg-card)", color: "var(--c-text-2)", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>−</button>
+              <span style={{ fontSize: 11, color: "var(--c-text-m)", fontFamily: "monospace", minWidth: 36, textAlign: "center" }}>{Math.round(zoom * 100)}%</span>
               <button onClick={() => setZoom(z => Math.min(3, parseFloat((z + 0.25).toFixed(2))))}
-                style={{ padding: "5px 10px", borderRadius: 4, border: "1px solid #1e2235", background: "#0d0f18", color: "#8a94b5", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>+</button>
+                style={{ padding: "5px 10px", borderRadius: 4, border: "1px solid var(--c-border)", background: "var(--c-bg-card)", color: "var(--c-text-2)", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>+</button>
             </div>
             <button onClick={() => setDepthMode(v => !v)}
-              style={{ padding: "6px 12px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 12, border: `1px solid ${depthMode ? "#3b82f6" : "#1e2235"}`, background: depthMode ? "#0b1121" : "#0d0f18", color: depthMode ? "#3b82f6" : "#555d7a", fontWeight: depthMode ? 700 : 400 }}>
+              style={{ padding: "6px 12px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 12, border: `1px solid ${depthMode ? "#3b82f6" : "var(--c-border)"}`, background: depthMode ? "#0b1121" : "var(--c-bg-card)", color: depthMode ? "#3b82f6" : "var(--c-text-m)", fontWeight: depthMode ? 700 : 400 }}>
               📊 ความลึก
             </button>
             {depthMode && (
@@ -1281,7 +1305,7 @@ export default function App() {
                   placeholder={`${depthRange.max}ม.`}
                   value={depthRangeMaxInput}
                   onChange={e => setDepthRangeMaxInput(e.target.value)}
-                  style={{ width: 58, padding: "2px 6px", borderRadius: 4, border: "1px solid #1e4aaa", background: "#080a10", color: "#60a5fa", fontSize: 11, fontFamily: "monospace", outline: "none", textAlign: "right" }}
+                  style={{ width: 58, padding: "2px 6px", borderRadius: 4, border: "1px solid #1e4aaa", background: "var(--c-bg)", color: "#60a5fa", fontSize: 11, fontFamily: "monospace", outline: "none", textAlign: "right" }}
                 />
                 <div style={{ width: 50, height: 6, borderRadius: 3, background: "linear-gradient(to right, #3b82f6, #22c55e, #ef4444)", flexShrink: 0 }} />
                 <input
@@ -1289,11 +1313,11 @@ export default function App() {
                   placeholder={depthRange.min !== null ? `${depthRange.min.toFixed(1)}ม.` : "auto"}
                   value={depthRangeInput}
                   onChange={e => setDepthRangeInput(e.target.value)}
-                  style={{ width: 68, padding: "2px 6px", borderRadius: 4, border: "1px solid #7f1d1d", background: "#080a10", color: "#ef4444", fontSize: 11, fontFamily: "monospace", outline: "none" }}
+                  style={{ width: 68, padding: "2px 6px", borderRadius: 4, border: "1px solid #7f1d1d", background: "var(--c-bg)", color: "#ef4444", fontSize: 11, fontFamily: "monospace", outline: "none" }}
                 />
                 {(depthRangeInput !== "" || depthRangeMaxInput !== "") && (
                   <button onClick={() => { setDepthRangeInput(""); setDepthRangeMaxInput(""); }}
-                    style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, border: "1px solid #1e2235", background: "transparent", color: "#555d7a", cursor: "pointer" }}>
+                    style={{ fontSize: 10, padding: "2px 6px", borderRadius: 4, border: "1px solid var(--c-border)", background: "transparent", color: "var(--c-text-m)", cursor: "pointer" }}>
                     auto
                   </button>
                 )}
@@ -1320,7 +1344,7 @@ export default function App() {
                         <div key={ci} style={{
                           width: colSlotW[ci], flexShrink: 0, textAlign: "center",
                           fontSize: Math.max(10, Math.round(11 * zoom)),
-                          color: isMain ? "#4a5580" : "#1e2338",
+                          color: isMain ? "var(--c-text-f)" : "var(--c-border)",
                           fontWeight: isMain ? 700 : 400,
                         }}>
                           {isMain ? lbl : ""}
@@ -1336,7 +1360,7 @@ export default function App() {
                           width: LABEL_W, flexShrink: 0,
                           fontSize: Math.max(11, Math.round(13 * zoom)),
                           fontWeight: meta.type !== "inter" ? 700 : 400,
-                          color: meta.type !== "inter" ? "#5a6090" : "#1e2338",
+                          color: meta.type !== "inter" ? "var(--c-text-m)" : "var(--c-border)",
                           textAlign: "right", paddingRight: 8,
                           fontFamily: "'IBM Plex Mono'",
                         }}>
@@ -1366,20 +1390,20 @@ export default function App() {
             <div style={{ padding: 16, flex: 1, overflow: "auto", animation: "slideIn .15s ease" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                 <div>
-                  <div style={{ fontSize: 10, color: "#1e2235", letterSpacing: 2 }}>เพิ่มเสาเข็มแก้ไข</div>
+                  <div style={{ fontSize: 10, color: "var(--c-border)", letterSpacing: 2 }}>เพิ่มเสาเข็มแก้ไข</div>
                   <div style={{ fontFamily: "'Sarabun',sans-serif", fontSize: 20, fontWeight: 700, color: REM_DOT_COLOR }}>เข็มเดิม #{remDialog.pileId}</div>
                 </div>
-                <button onClick={() => setRemDialog(null)} style={{ background: "none", border: "none", color: "#333c5a", cursor: "pointer", fontSize: 24, padding: "0 5px" }}>✕</button>
+                <button onClick={() => setRemDialog(null)} style={{ background: "none", border: "none", color: "var(--c-border-b)", cursor: "pointer", fontSize: 24, padding: "0 5px" }}>✕</button>
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {/* ประเภทฐานราก */}
                 <div>
-                  <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>ประเภทฐานราก</div>
+                  <div style={{ fontSize: 11, color: "var(--c-border-b)", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>ประเภทฐานราก</div>
                   <div style={{ display: "flex", gap: 6 }}>
                     {["F1", "F2", "F-Drop"].map(t => (
                       <button key={t} onClick={() => setRemDialog(d => ({ ...d, remCase: t }))}
-                        style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: remDialog.remCase === t ? 700 : 400, background: remDialog.remCase === t ? "#1a0f2e" : "transparent", border: `1px solid ${remDialog.remCase === t ? REM_DOT_BD : "#1e2235"}`, color: remDialog.remCase === t ? REM_DOT_COLOR : "#555d7a" }}>
+                        style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: remDialog.remCase === t ? 700 : 400, background: remDialog.remCase === t ? "#1a0f2e" : "transparent", border: `1px solid ${remDialog.remCase === t ? REM_DOT_BD : "var(--c-border)"}`, color: remDialog.remCase === t ? REM_DOT_COLOR : "var(--c-text-m)" }}>
                         {t}
                       </button>
                     ))}
@@ -1388,11 +1412,11 @@ export default function App() {
 
                 {/* ทิศทาง */}
                 <div>
-                  <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>ทิศทางวางเข็มแก้ไข</div>
+                  <div style={{ fontSize: 11, color: "var(--c-border-b)", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>ทิศทางวางเข็มแก้ไข</div>
                   <div style={{ display: "flex", gap: 6 }}>
                     {[{ v: "horizontal", l: "◇ ● ◇ ซ้าย-ขวา" }, { v: "vertical", l: "◇ ● ◇ บน-ล่าง" }].map(({ v, l }) => (
                       <button key={v} onClick={() => setRemDialog(d => ({ ...d, direction: v }))}
-                        style={{ flex: 1, padding: "10px 4px", fontSize: 12, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: remDialog.direction === v ? 700 : 400, background: remDialog.direction === v ? "#1a0f2e" : "transparent", border: `1px solid ${remDialog.direction === v ? REM_DOT_BD : "#1e2235"}`, color: remDialog.direction === v ? REM_DOT_COLOR : "#555d7a" }}>
+                        style={{ flex: 1, padding: "10px 4px", fontSize: 12, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: remDialog.direction === v ? 700 : 400, background: remDialog.direction === v ? "#1a0f2e" : "transparent", border: `1px solid ${remDialog.direction === v ? REM_DOT_BD : "var(--c-border)"}`, color: remDialog.direction === v ? REM_DOT_COLOR : "var(--c-text-m)" }}>
                         {l}
                       </button>
                     ))}
@@ -1400,27 +1424,27 @@ export default function App() {
                 </div>
 
                 {/* ระยะห่าง */}
-                <div style={{ background: "#0d0f18", borderRadius: 4, padding: 10, fontSize: 13, color: "#8a94b5", border: "1px solid #111420", fontFamily: "'Sarabun',sans-serif" }}>
+                <div style={{ background: "var(--c-bg-card)", borderRadius: 4, padding: 10, fontSize: 13, color: "var(--c-text-2)", border: "1px solid var(--c-border-s)", fontFamily: "'Sarabun',sans-serif" }}>
                   ระยะห่าง: <span style={{ color: REM_DOT_COLOR, fontWeight: 700 }}>{getRemSpacing(remDialog.remCase).toFixed(2)} ม.</span> จากแนวเดิม
                 </div>
 
                 {/* Pile ID inputs */}
                 <div>
-                  <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>Pile ID เสาเข็มแก้ไข (พิมพ์เอง)</div>
+                  <div style={{ fontSize: 11, color: "var(--c-border-b)", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>Pile ID เสาเข็มแก้ไข (พิมพ์เอง)</div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                     <div>
-                      <div style={{ fontSize: 10, color: "#555d7a", marginBottom: 4, fontFamily: "'Sarabun',sans-serif" }}>ต้นที่ 1 ({remDialog.direction === "horizontal" ? "ซ้าย" : "บน"})</div>
+                      <div style={{ fontSize: 10, color: "var(--c-text-m)", marginBottom: 4, fontFamily: "'Sarabun',sans-serif" }}>ต้นที่ 1 ({remDialog.direction === "horizontal" ? "ซ้าย" : "บน"})</div>
                       <input className="inp" type="text" placeholder="เช่น 1112" value={remDialog.id1} onChange={e => setRemDialog(d => ({ ...d, id1: e.target.value }))} />
                     </div>
                     <div>
-                      <div style={{ fontSize: 10, color: "#555d7a", marginBottom: 4, fontFamily: "'Sarabun',sans-serif" }}>ต้นที่ 2 ({remDialog.direction === "horizontal" ? "ขวา" : "ล่าง"})</div>
+                      <div style={{ fontSize: 10, color: "var(--c-text-m)", marginBottom: 4, fontFamily: "'Sarabun',sans-serif" }}>ต้นที่ 2 ({remDialog.direction === "horizontal" ? "ขวา" : "ล่าง"})</div>
                       <input className="inp" type="text" placeholder="เช่น 1113" value={remDialog.id2} onChange={e => setRemDialog(d => ({ ...d, id2: e.target.value }))} />
                     </div>
                   </div>
                 </div>
 
                 {/* สรุป */}
-                <div style={{ background: "#1a0f2e", borderRadius: 4, padding: 12, fontSize: 13, border: `1px solid ${REM_DOT_BD}`, fontFamily: "'Sarabun',sans-serif", color: "#cdd1e0" }}>
+                <div style={{ background: "#1a0f2e", borderRadius: 4, padding: 12, fontSize: 13, border: `1px solid ${REM_DOT_BD}`, fontFamily: "'Sarabun',sans-serif", color: "var(--c-text)" }}>
                   จะเพิ่มเสาเข็มแก้ไข <span style={{ color: REM_DOT_COLOR, fontWeight: 700 }}>2 ต้น</span> ให้เข็ม #{remDialog.pileId}
                   <br />ประเภท: {remDialog.remCase} · ทิศทาง: {remDialog.direction === "horizontal" ? "ซ้าย-ขวา" : "บน-ล่าง"}
                 </div>
@@ -1428,15 +1452,15 @@ export default function App() {
 
               <div style={{ padding: "16px 0", display: "flex", gap: 10 }}>
                 <button onClick={applyRemediation} disabled={!canEdit} style={{ flex: 1, padding: "12px", borderRadius: 4, border: `1px solid ${REM_DOT_BD}`, background: "#1a0f2e", color: REM_DOT_COLOR, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 15, opacity: canEdit ? 1 : 0.4 }}>ยืนยัน เพิ่มเข็มแก้ไข</button>
-                <button onClick={() => setRemDialog(null)} style={{ padding: "12px 16px", borderRadius: 4, border: "1px solid #1e2235", background: "#0d0f18", color: "#555d7a", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 14 }}>ยกเลิก</button>
+                <button onClick={() => setRemDialog(null)} style={{ padding: "12px 16px", borderRadius: 4, border: "1px solid var(--c-border)", background: "var(--c-bg-card)", color: "var(--c-text-m)", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 14 }}>ยกเลิก</button>
               </div>
             </div>
           )}
 
           {/* ── Cell Selected View ── */}
           {selCell && !selPile && !selRemPile && !remDialog && (
-            <div style={{ padding: 16, borderBottom: "1px solid #111420", animation: "slideIn .15s ease" }}>
-              <div style={{ fontSize: 10, color: "#1e2235", letterSpacing: 2, marginBottom: 5 }}>FOOTING SELECTED</div>
+            <div style={{ padding: 16, borderBottom: "1px solid var(--c-border-s)", animation: "slideIn .15s ease" }}>
+              <div style={{ fontSize: 10, color: "var(--c-border)", letterSpacing: 2, marginBottom: 5 }}>FOOTING SELECTED</div>
               <div style={{ fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 18, color: "#fbbf24", marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
                 <span>แถว {selCell.rowId} · Col {COL_LABELS[selCell.colIdx]}</span>
               </div>
@@ -1444,7 +1468,7 @@ export default function App() {
                 {selCell.pileIds.map(id => {
                   const p = piles[id];
                   return (
-                    <div key={id} onClick={() => openPile(id)} style={{ display: "flex", alignItems: "center", gap: 6, background: p.s === ST.X ? (ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR]).bg : ST_BG[p.s], border: `1px solid ${p.s === ST.X ? (ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR]).bd : ST_BD[p.s]}`, borderRadius: 4, padding: "6px 10px", cursor: "pointer", fontSize: 13, color: "#cdd1e0" }}>
+                    <div key={id} onClick={() => openPile(id)} style={{ display: "flex", alignItems: "center", gap: 6, background: p.s === ST.X ? (ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR]).bg : ST_BG[p.s], border: `1px solid ${p.s === ST.X ? (ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR]).bd : ST_BD[p.s]}`, borderRadius: 4, padding: "6px 10px", cursor: "pointer", fontSize: 13, color: "var(--c-text)" }}>
                       <div style={{ width: 10, height: 10, borderRadius: "50%", background: p.s === ST.X ? (ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR]).dot : ST_DOT[p.s] }} />
                       #{id}
                     </div>
@@ -1456,7 +1480,7 @@ export default function App() {
                   if (!rp) return null;
                   const color = rp.s === ST.D ? "#22c55e" : rp.s === ST.X ? "#ef4444" : REM_DOT_COLOR;
                   return (
-                    <div key={rid} onClick={() => openRemPile(rid)} style={{ display: "flex", alignItems: "center", gap: 6, background: "#1a0f2e", border: `1px solid ${REM_DOT_BD}`, borderRadius: 4, padding: "6px 10px", cursor: "pointer", fontSize: 13, color: "#cdd1e0" }}>
+                    <div key={rid} onClick={() => openRemPile(rid)} style={{ display: "flex", alignItems: "center", gap: 6, background: "#1a0f2e", border: `1px solid ${REM_DOT_BD}`, borderRadius: 4, padding: "6px 10px", cursor: "pointer", fontSize: 13, color: "var(--c-text)" }}>
                       <div style={{ width: 10, height: 10, background: color, transform: "rotate(45deg)", flexShrink: 0 }} />
                       #{rid}
                     </div>
@@ -1466,11 +1490,11 @@ export default function App() {
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={() => markCell(selCell.pileIds, ST.D)} disabled={!canEdit} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", background: "#0b2117", border: "1px solid #16703a", color: "#22c55e", opacity: canEdit ? 1 : 0.4 }}>✓ กดแล้ว</button>
                 <button onClick={() => canEdit ? setCellIssueMenu(v => !v) : setShowLoginDialog(true)} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", background: "#210b0b", border: "1px solid #8c1c1c", color: "#ef4444", opacity: canEdit ? 1 : 0.4 }}>! ปัญหา ▾</button>
-                <button onClick={() => markCell(selCell.pileIds, ST.P)} disabled={!canEdit} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", background: "#141620", border: "1px solid #272c42", color: "#555d7a", opacity: canEdit ? 1 : 0.4 }}>↺ รีเซ็ต</button>
+                <button onClick={() => markCell(selCell.pileIds, ST.P)} disabled={!canEdit} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", background: "var(--c-bg-hover)", border: "1px solid var(--c-border-b)", color: "var(--c-text-m)", opacity: canEdit ? 1 : 0.4 }}>↺ รีเซ็ต</button>
               </div>
               {cellIssueMenu && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, animation: "slideIn .15s ease" }}>
-                  <div style={{ fontSize: 10, color: "#555d7a", marginBottom: 2, fontFamily: "'Sarabun',sans-serif" }}>เลือกประเภทปัญหา:</div>
+                  <div style={{ fontSize: 10, color: "var(--c-text-m)", marginBottom: 2, fontFamily: "'Sarabun',sans-serif" }}>เลือกประเภทปัญหา:</div>
                   {ISSUE_COLOR_KEYS.map(ck => {
                     const ic = ISSUE_COLORS[ck];
                     return (
@@ -1490,25 +1514,25 @@ export default function App() {
             <div style={{ padding: 16, flex: 1, overflow: "auto", animation: "slideIn .15s ease" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                 <div>
-                  <div style={{ fontSize: 10, color: "#1e2235", letterSpacing: 2 }}>
+                  <div style={{ fontSize: 10, color: "var(--c-border)", letterSpacing: 2 }}>
                     {selRemPile ? "บันทึกข้อมูลเข็มแก้ไข" : "บันทึกข้อมูลหน้างาน"}
                   </div>
                   <div style={{ fontFamily: "'Sarabun',sans-serif", fontSize: 22, fontWeight: 700, color: selRemPile ? REM_DOT_COLOR : "#fbbf24" }}>
                     {selRemPile ? (
                       <>
-                        <span style={{ fontSize: 13, color: "#555d7a", fontWeight: 400 }}>แก้ไข</span> #{selRemPile}
+                        <span style={{ fontSize: 13, color: "var(--c-text-m)", fontWeight: 400 }}>แก้ไข</span> #{selRemPile}
                       </>
                     ) : (
                       <>เสาเข็ม #{selPile}</>
                     )}
                   </div>
                   {selRemPile && remPiles[selRemPile] && (
-                    <div style={{ fontSize: 11, color: "#555d7a", fontFamily: "'Sarabun',sans-serif", marginTop: 2 }}>
+                    <div style={{ fontSize: 11, color: "var(--c-text-m)", fontFamily: "'Sarabun',sans-serif", marginTop: 2 }}>
                       เข็มเดิม: #{remPiles[selRemPile].parentPileId} · {remPiles[selRemPile].remCase}
                     </div>
                   )}
                 </div>
-                <button onClick={closePanel} style={{ background: "none", border: "none", color: "#333c5a", cursor: "pointer", fontSize: 24, padding: "0 5px" }}>✕</button>
+                <button onClick={closePanel} style={{ background: "none", border: "none", color: "var(--c-border-b)", cursor: "pointer", fontSize: 24, padding: "0 5px" }}>✕</button>
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1520,21 +1544,21 @@ export default function App() {
                       display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                       padding: "12px", borderRadius: 4, cursor: "pointer",
                       fontFamily: "'Sarabun',sans-serif", fontWeight: 600, fontSize: 14,
-                      background: "#0d0f18", border: "1px dashed #333c5a", color: "#8a94b5",
+                      background: "var(--c-bg-card)", border: "1px dashed var(--c-border-b)", color: "var(--c-text-2)",
                       transition: "all .15s",
                     }}>
                       📷 ถ่ายรูป / เลือกรูป
                     </label>
                   ) : (
                     <div style={{ position: "relative" }}>
-                      <img src={photoPreview} alt="preview" style={{ width: "100%", maxHeight: 200, objectFit: "contain", borderRadius: 4, border: "1px solid #1e2235" }} />
+                      <img src={photoPreview} alt="preview" style={{ width: "100%", maxHeight: 200, objectFit: "contain", borderRadius: 4, border: "1px solid var(--c-border)" }} />
                       <button onClick={() => { setPhotoFile(null); setPhotoPreview(null); setOcrResult(null); }} style={{ position: "absolute", top: 4, right: 4, background: "rgba(0,0,0,0.7)", border: "none", color: "#ef4444", cursor: "pointer", borderRadius: "50%", width: 24, height: 24, fontSize: 14, display: "grid", placeItems: "center" }}>✕</button>
                       {!ocrResult && (
                         <button onClick={handleOcrRead} disabled={ocrLoading} style={{
                           width: "100%", marginTop: 8, padding: "10px", borderRadius: 4, cursor: ocrLoading ? "wait" : "pointer",
                           fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 13,
-                          background: ocrLoading ? "#141825" : "#1a0f2e", border: `1px solid ${ocrLoading ? "#333c5a" : "#7c3aed"}`,
-                          color: ocrLoading ? "#555d7a" : "#a855f7",
+                          background: ocrLoading ? "var(--c-bg-hover)" : "#1a0f2e", border: `1px solid ${ocrLoading ? "var(--c-border-b)" : "#7c3aed"}`,
+                          color: ocrLoading ? "var(--c-text-m)" : "#a855f7",
                         }}>
                           {ocrLoading ? (
                             <span style={{ animation: "pulse 1s infinite" }}>AI กำลังอ่านข้อมูล...</span>
@@ -1548,20 +1572,20 @@ export default function App() {
                   {ocrResult && (
                     <div style={{ marginTop: 8, background: "#0b2117", borderRadius: 4, padding: 12, border: "1px solid #16703a", fontSize: 12, fontFamily: "'Sarabun',sans-serif" }}>
                       <div style={{ color: "#22c55e", fontWeight: 700, marginBottom: 8 }}>AI อ่านข้อมูลได้:</div>
-                      <div style={{ color: "#8a94b5", lineHeight: 2 }}>
+                      <div style={{ color: "var(--c-text-2)", lineHeight: 2 }}>
                         {ocrResult.pileNo && <div>Pile No: <span style={{ color: "#fbbf24", fontWeight: 700 }}>#{ocrResult.pileNo}</span></div>}
-                        {ocrResult.date && <div>วันที่: <span style={{ color: "#cdd1e0" }}>{ocrResult.date}</span></div>}
-                        {ocrResult.startTime && <div>เริ่มกด: <span style={{ color: "#cdd1e0" }}>{ocrResult.startTime}</span></div>}
-                        {ocrResult.endTime && <div>กดจบ: <span style={{ color: "#cdd1e0" }}>{ocrResult.endTime}</span></div>}
-                        {ocrResult.pileTip && <div>PileTip: <span style={{ color: "#cdd1e0" }}>{ocrResult.pileTip}</span></div>}
-                        {ocrResult.pileTop && <div>PileTop: <span style={{ color: "#cdd1e0" }}>{ocrResult.pileTop}</span></div>}
-                        {ocrResult.pressure && <div>Pressure: <span style={{ color: "#cdd1e0" }}>{ocrResult.pressure}</span></div>}
+                        {ocrResult.date && <div>วันที่: <span style={{ color: "var(--c-text)" }}>{ocrResult.date}</span></div>}
+                        {ocrResult.startTime && <div>เริ่มกด: <span style={{ color: "var(--c-text)" }}>{ocrResult.startTime}</span></div>}
+                        {ocrResult.endTime && <div>กดจบ: <span style={{ color: "var(--c-text)" }}>{ocrResult.endTime}</span></div>}
+                        {ocrResult.pileTip && <div>PileTip: <span style={{ color: "var(--c-text)" }}>{ocrResult.pileTip}</span></div>}
+                        {ocrResult.pileTop && <div>PileTop: <span style={{ color: "var(--c-text)" }}>{ocrResult.pileTop}</span></div>}
+                        {ocrResult.pressure && <div>Pressure: <span style={{ color: "var(--c-text)" }}>{ocrResult.pressure}</span></div>}
                       </div>
                       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                         <button onClick={applyOcrToForm} style={{ flex: 1, padding: "8px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 13, background: "#0b2117", border: "1px solid #16703a", color: "#22c55e" }}>
                           ✓ ใช้ข้อมูลนี้
                         </button>
-                        <button onClick={() => setOcrResult(null)} style={{ padding: "8px 12px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 12, background: "transparent", border: "1px solid #1e2235", color: "#555d7a" }}>
+                        <button onClick={() => setOcrResult(null)} style={{ padding: "8px 12px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 12, background: "transparent", border: "1px solid var(--c-border)", color: "var(--c-text-m)" }}>
                           ยกเลิก
                         </button>
                       </div>
@@ -1570,23 +1594,23 @@ export default function App() {
                 </div>
 
                 <div>
-                  <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>สถานะเสาเข็ม</div>
+                  <div style={{ fontSize: 11, color: "var(--c-border-b)", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>สถานะเสาเข็ม</div>
                   <div style={{ display: "flex", gap: 6 }}>
                     {Object.entries(ST_TH).map(([k, v]) => (
-                      <button key={k} onClick={() => setForm(f => ({ ...f, s: k, issueColor: k === ST.X ? (f.issueColor || DEFAULT_ISSUE_COLOR) : "" }))} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: form.s === k ? 700 : 400, background: form.s === k ? ST_BG[k] : "transparent", border: `1px solid ${form.s === k ? ST_BD[k] : "#1e2235"}`, color: form.s === k ? "#cdd1e0" : "#333c5a" }}>
+                      <button key={k} onClick={() => setForm(f => ({ ...f, s: k, issueColor: k === ST.X ? (f.issueColor || DEFAULT_ISSUE_COLOR) : "" }))} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: form.s === k ? 700 : 400, background: form.s === k ? ST_BG[k] : "transparent", border: `1px solid ${form.s === k ? ST_BD[k] : "var(--c-border)"}`, color: form.s === k ? "var(--c-text)" : "var(--c-border-b)" }}>
                         {v}
                       </button>
                     ))}
                   </div>
                   {form.s === ST.X && (
                     <div style={{ marginTop: 8 }}>
-                      <div style={{ fontSize: 10, color: "#555d7a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>เลือกประเภทปัญหา:</div>
+                      <div style={{ fontSize: 10, color: "var(--c-text-m)", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>เลือกประเภทปัญหา:</div>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                         {ISSUE_COLOR_KEYS.map(ck => {
                           const ic = ISSUE_COLORS[ck];
                           const active = form.issueColor === ck;
                           return (
-                            <button key={ck} onClick={() => setForm(f => ({ ...f, issueColor: ck }))} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 12, fontWeight: active ? 700 : 400, background: active ? ic.bg : "transparent", border: `1px solid ${active ? ic.bd : "#1e2235"}`, color: active ? ic.dot : "#555d7a" }}>
+                            <button key={ck} onClick={() => setForm(f => ({ ...f, issueColor: ck }))} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 12, fontWeight: active ? 700 : 400, background: active ? ic.bg : "transparent", border: `1px solid ${active ? ic.bd : "var(--c-border)"}`, color: active ? ic.dot : "var(--c-text-m)" }}>
                             <div style={{ width: 10, height: 10, borderRadius: "50%", background: ic.dot, flexShrink: 0 }} />
                             {ic.label}
                           </button>
@@ -1599,16 +1623,16 @@ export default function App() {
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <div>
-                    <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>วันที่กด</div>
+                    <div style={{ fontSize: 11, color: "var(--c-border-b)", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>วันที่กด</div>
                     <input className="inp" type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} style={{ fontSize: 14 }} />
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
                     <div>
-                      <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>เริ่มกด</div>
+                      <div style={{ fontSize: 11, color: "var(--c-border-b)", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>เริ่มกด</div>
                       <input className="inp" type="time" value={form.startTime} onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))} style={{ padding: "8px 4px", fontSize: 13 }} />
                     </div>
                     <div>
-                      <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>กดจบ</div>
+                      <div style={{ fontSize: 11, color: "var(--c-border-b)", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>กดจบ</div>
                       <input className="inp" type="time" value={form.endTime} onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))} style={{ padding: "8px 4px", fontSize: 13 }} />
                     </div>
                   </div>
@@ -1616,22 +1640,22 @@ export default function App() {
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <div>
-                    <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>Pile Tip (ม.)</div>
+                    <div style={{ fontSize: 11, color: "var(--c-border-b)", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>Pile Tip (ม.)</div>
                     <input className="inp" type="number" step="0.01" placeholder="17.40" value={form.pileTip} onChange={e => setForm(f => ({ ...f, pileTip: e.target.value }))} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>Pile Top (ม.)</div>
+                    <div style={{ fontSize: 11, color: "var(--c-border-b)", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>Pile Top (ม.)</div>
                     <input className="inp" type="number" step="0.01" placeholder="+4.60" value={form.pileTop} onChange={e => setForm(f => ({ ...f, pileTop: e.target.value }))} />
                   </div>
                 </div>
 
                 <div>
-                  <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>Pressure (Pressure)</div>
+                  <div style={{ fontSize: 11, color: "var(--c-border-b)", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>Pressure (Pressure)</div>
                   <input className="inp" type="number" placeholder="110" value={form.pressure} onChange={e => setForm(f => ({ ...f, pressure: e.target.value }))} />
                 </div>
 
                 <div>
-                  <div style={{ fontSize: 11, color: "#333c5a", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>หมายเหตุ</div>
+                  <div style={{ fontSize: 11, color: "var(--c-border-b)", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>หมายเหตุ</div>
                   <textarea className="inp" rows={2} placeholder="บันทึกปัญหา หรือข้อมูลเพิ่มเติม..." value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} style={{ resize: "vertical" }} />
                 </div>
 
@@ -1649,7 +1673,7 @@ export default function App() {
                   return (
                     <div style={{ background: "#1a0f2e", borderRadius: 4, padding: 12, border: `1px solid ${REM_DOT_BD}`, fontSize: 12, fontFamily: "'Sarabun',sans-serif" }}>
                       <div style={{ color: REM_DOT_COLOR, fontWeight: 700, marginBottom: 6 }}>เสาเข็มแก้ไข ({group.remCase})</div>
-                      <div style={{ color: "#8a94b5", lineHeight: 1.8 }}>
+                      <div style={{ color: "var(--c-text-2)", lineHeight: 1.8 }}>
                         ทิศทาง: {group.direction === "horizontal" ? "ซ้าย-ขวา" : "บน-ล่าง"}<br />
                         ระยะห่าง: {group.spacing} ม.<br />
                         เข็มแก้ไข: {group.remPileIds.map(rid => `#${rid}`).join(", ")}
@@ -1663,18 +1687,18 @@ export default function App() {
 
                 {/* Last record (เข็มปกติ) */}
                 {selPile && piles[selPile]?.date && (
-                  <div style={{ background: "#0d0f18", borderRadius: 4, padding: 12, fontSize: 12, color: "#333c5a", border: "1px solid #111420", lineHeight: 1.8 }}>
+                  <div style={{ background: "var(--c-bg-card)", borderRadius: 4, padding: 12, fontSize: 12, color: "var(--c-border-b)", border: "1px solid var(--c-border-s)", lineHeight: 1.8 }}>
                     <div style={{ color: "#16703a", fontFamily: "'Sarabun',sans-serif", fontSize: 12, marginBottom: 6, fontWeight: "bold" }}>บันทึกล่าสุด ☁️</div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-                      <div>📅 วันที่: <span style={{ color: "#8a94b5" }}>{piles[selPile].date}</span></div>
-                      <div>⏱️ เวลา: <span style={{ color: "#8a94b5" }}>{piles[selPile].startTime || "-"} ถึง {piles[selPile].endTime || "-"} น.</span></div>
-                      <div>⏬ Tip: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{piles[selPile].pileTip || "-"}</span> ม.</div>
-                      <div>⏫ Top: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{piles[selPile].pileTop || "-"}</span> ม.</div>
-                      <div>🗜️ Press: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{piles[selPile].pressure || "-"}</span></div>
+                      <div>📅 วันที่: <span style={{ color: "var(--c-text-2)" }}>{piles[selPile].date}</span></div>
+                      <div>⏱️ เวลา: <span style={{ color: "var(--c-text-2)" }}>{piles[selPile].startTime || "-"} ถึง {piles[selPile].endTime || "-"} น.</span></div>
+                      <div>⏬ Tip: <span style={{ color: "var(--c-text)", fontWeight: "bold" }}>{piles[selPile].pileTip || "-"}</span> ม.</div>
+                      <div>⏫ Top: <span style={{ color: "var(--c-text)", fontWeight: "bold" }}>{piles[selPile].pileTop || "-"}</span> ม.</div>
+                      <div>🗜️ Press: <span style={{ color: "var(--c-text)", fontWeight: "bold" }}>{piles[selPile].pressure || "-"}</span></div>
                     </div>
                     {piles[selPile].photoUrl && (
                       <a href={piles[selPile].photoUrl} target="_blank" rel="noopener noreferrer" style={{ display: "block", marginTop: 8 }}>
-                        <img src={piles[selPile].photoUrl} alt="pile photo" style={{ width: "100%", maxHeight: 150, objectFit: "contain", borderRadius: 4, border: "1px solid #1e2235" }} />
+                        <img src={piles[selPile].photoUrl} alt="pile photo" style={{ width: "100%", maxHeight: 150, objectFit: "contain", borderRadius: 4, border: "1px solid var(--c-border)" }} />
                       </a>
                     )}
                   </div>
@@ -1682,18 +1706,18 @@ export default function App() {
 
                 {/* Last record (เข็มแก้ไข) */}
                 {selRemPile && remPiles[selRemPile]?.date && (
-                  <div style={{ background: "#0d0f18", borderRadius: 4, padding: 12, fontSize: 12, color: "#333c5a", border: "1px solid #111420", lineHeight: 1.8 }}>
+                  <div style={{ background: "var(--c-bg-card)", borderRadius: 4, padding: 12, fontSize: 12, color: "var(--c-border-b)", border: "1px solid var(--c-border-s)", lineHeight: 1.8 }}>
                     <div style={{ color: REM_DOT_BD, fontFamily: "'Sarabun',sans-serif", fontSize: 12, marginBottom: 6, fontWeight: "bold" }}>บันทึกล่าสุด ☁️</div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
-                      <div>📅 วันที่: <span style={{ color: "#8a94b5" }}>{remPiles[selRemPile].date}</span></div>
-                      <div>⏱️ เวลา: <span style={{ color: "#8a94b5" }}>{remPiles[selRemPile].startTime || "-"} ถึง {remPiles[selRemPile].endTime || "-"} น.</span></div>
-                      <div>⏬ Tip: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{remPiles[selRemPile].pileTip || "-"}</span> ม.</div>
-                      <div>⏫ Top: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{remPiles[selRemPile].pileTop || "-"}</span> ม.</div>
-                      <div>🗜️ Press: <span style={{ color: "#cdd1e0", fontWeight: "bold" }}>{remPiles[selRemPile].pressure || "-"}</span></div>
+                      <div>📅 วันที่: <span style={{ color: "var(--c-text-2)" }}>{remPiles[selRemPile].date}</span></div>
+                      <div>⏱️ เวลา: <span style={{ color: "var(--c-text-2)" }}>{remPiles[selRemPile].startTime || "-"} ถึง {remPiles[selRemPile].endTime || "-"} น.</span></div>
+                      <div>⏬ Tip: <span style={{ color: "var(--c-text)", fontWeight: "bold" }}>{remPiles[selRemPile].pileTip || "-"}</span> ม.</div>
+                      <div>⏫ Top: <span style={{ color: "var(--c-text)", fontWeight: "bold" }}>{remPiles[selRemPile].pileTop || "-"}</span> ม.</div>
+                      <div>🗜️ Press: <span style={{ color: "var(--c-text)", fontWeight: "bold" }}>{remPiles[selRemPile].pressure || "-"}</span></div>
                     </div>
                     {remPiles[selRemPile].photoUrl && (
                       <a href={remPiles[selRemPile].photoUrl} target="_blank" rel="noopener noreferrer" style={{ display: "block", marginTop: 8 }}>
-                        <img src={remPiles[selRemPile].photoUrl} alt="pile photo" style={{ width: "100%", maxHeight: 150, objectFit: "contain", borderRadius: 4, border: "1px solid #1e2235" }} />
+                        <img src={remPiles[selRemPile].photoUrl} alt="pile photo" style={{ width: "100%", maxHeight: 150, objectFit: "contain", borderRadius: 4, border: "1px solid var(--c-border)" }} />
                       </a>
                     )}
                   </div>
@@ -1703,9 +1727,9 @@ export default function App() {
           )}
 
           {(selPile || selRemPile) && form && !remDialog ? (
-            <div style={{ padding: 16, borderTop: "1px solid #111420", display: "flex", gap: 10, background: "#060810" }}>
+            <div style={{ padding: 16, borderTop: "1px solid var(--c-border-s)", display: "flex", gap: 10, background: "var(--c-bg-h)" }}>
               <button onClick={savePile} disabled={!canEdit} style={{ flex: 1, padding: "12px", borderRadius: 4, border: `1px solid ${selRemPile ? REM_DOT_BD : "#16703a"}`, background: selRemPile ? "#1a0f2e" : "#0b2117", color: selRemPile ? REM_DOT_COLOR : "#22c55e", cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 15, opacity: canEdit ? 1 : 0.4 }}>{canEdit ? "บันทึก ☁️" : "🔒 ล็อกอินเพื่อบันทึก"}</button>
-              <button onClick={closePanel} style={{ padding: "12px 16px", borderRadius: 4, border: "1px solid #1e2235", background: "#0d0f18", color: "#555d7a", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 14 }}>ยกเลิก</button>
+              <button onClick={closePanel} style={{ padding: "12px 16px", borderRadius: 4, border: "1px solid var(--c-border)", background: "var(--c-bg-card)", color: "var(--c-text-m)", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 14 }}>ยกเลิก</button>
             </div>
           ) : !selCell && !remDialog && (
             <div className="desktop-placeholder" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", color: "#151825", textAlign: "center", padding: 20 }}>
