@@ -999,6 +999,11 @@ export default function App() {
 
   const isPanelOpen = selCell || selPile || selRemPile || remDialog;
 
+  // ── theme-aware accent backgrounds ──
+  const LBG = { green: lightMode?'#d1fae5':'#0b2117', red: lightMode?'#fee2e2':'#210b0b', purple: lightMode?'#f3e8ff':'#1a0f2e' };
+  const LSTBG = { p:'var(--c-bg-hover)', d: lightMode?'#d1fae5':'#0b2117', x: lightMode?'#fee2e2':'#210b0b' };
+  const LISSUEBG = { red:lightMode?'#fee2e2':'#210b0b', orange:lightMode?'#ffedd5':'#211505', yellow:lightMode?'#fef9c3':'#211d05', blue:lightMode?'#dbeafe':'#0b1121' };
+
   // ── เปิด remediation dialog ──
   const openRemDialog = (pileId) => {
     const cell = findCellByPileId(pileId);
@@ -1122,7 +1127,7 @@ export default function App() {
                   if (canEdit) setShowApiKeyDialog(false);
                 }}
                 disabled={!canEdit}
-                style={{ flex: 1, padding: "10px", borderRadius: 4, border: "1px solid #16703a", background: "#0b2117", color: "#22c55e", cursor: canEdit ? "pointer" : "not-allowed", fontWeight: 700, fontSize: 14, opacity: canEdit ? 1 : 0.4 }}
+                style={{ flex: 1, padding: "10px", borderRadius: 4, border: "1px solid #16703a", background: LBG.green, color: "#22c55e", cursor: canEdit ? "pointer" : "not-allowed", fontWeight: 700, fontSize: 14, opacity: canEdit ? 1 : 0.4 }}
               >{canEdit ? "บันทึก" : "🔒 ต้องล็อกอินก่อน"}</button>
               <button
                 onClick={() => setShowApiKeyDialog(false)}
@@ -1163,14 +1168,14 @@ export default function App() {
             />
 
             {loginError && (
-              <div style={{ fontSize: 12, color: "#ef4444", marginBottom: 12, padding: "8px 10px", background: "#210b0b", border: "1px solid #8c1c1c", borderRadius: 4 }}>{loginError}</div>
+              <div style={{ fontSize: 12, color: "#ef4444", marginBottom: 12, padding: "8px 10px", background: LBG.red, border: "1px solid #8c1c1c", borderRadius: 4 }}>{loginError}</div>
             )}
 
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 onClick={handleLogin}
                 disabled={loginLoading}
-                style={{ flex: 1, padding: "10px", borderRadius: 4, border: "1px solid #16703a", background: "#0b2117", color: "#22c55e", cursor: loginLoading ? "wait" : "pointer", fontWeight: 700, fontSize: 14, opacity: loginLoading ? 0.5 : 1 }}
+                style={{ flex: 1, padding: "10px", borderRadius: 4, border: "1px solid #16703a", background: LBG.green, color: "#22c55e", cursor: loginLoading ? "wait" : "pointer", fontWeight: 700, fontSize: 14, opacity: loginLoading ? 0.5 : 1 }}
               >{loginLoading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}</button>
               <button
                 onClick={() => { setShowLoginDialog(false); setLoginError(""); setLoginPassword(""); }}
@@ -1183,7 +1188,7 @@ export default function App() {
 
       {/* HEADER */}
       <div className="app-header" style={{ background: "var(--c-bg-h)", borderBottom: "1px solid var(--c-border-s)", padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-        <div style={{ width: 28, height: 28, background: "linear-gradient(135deg,#0b2117,#16703a)", borderRadius: 4, display: "grid", placeItems: "center", fontSize: 13 }}>⬛</div>
+        <div style={{ width: 28, height: 28, background: "linear-gradient(135deg,#0b2117,#16703a)", borderRadius: 4, display: "grid", placeItems: "center", fontSize: 13, color: "#22c55e", fontWeight: 700, fontFamily: "monospace" }}>P</div>
         <div style={{ minWidth: 0 }}>
           <div className="app-title" style={{ fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 16, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>ติดตามการกดเสาเข็ม (Blueprint)</div>
           <div className="app-subtitle" style={{ fontSize: 9, color: "var(--c-border)", letterSpacing: 3 }}>GRID A–M × 1–21 · F1/F2 · 1,111 PILES</div>
@@ -1403,7 +1408,7 @@ export default function App() {
                   <div style={{ display: "flex", gap: 6 }}>
                     {["F1", "F2", "F-Drop"].map(t => (
                       <button key={t} onClick={() => setRemDialog(d => ({ ...d, remCase: t }))}
-                        style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: remDialog.remCase === t ? 700 : 400, background: remDialog.remCase === t ? "#1a0f2e" : "transparent", border: `1px solid ${remDialog.remCase === t ? REM_DOT_BD : "var(--c-border)"}`, color: remDialog.remCase === t ? REM_DOT_COLOR : "var(--c-text-m)" }}>
+                        style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: remDialog.remCase === t ? 700 : 400, background: remDialog.remCase === t ? LBG.purple : "transparent", border: `1px solid ${remDialog.remCase === t ? REM_DOT_BD : "var(--c-border)"}`, color: remDialog.remCase === t ? REM_DOT_COLOR : "var(--c-text-m)" }}>
                         {t}
                       </button>
                     ))}
@@ -1416,7 +1421,7 @@ export default function App() {
                   <div style={{ display: "flex", gap: 6 }}>
                     {[{ v: "horizontal", l: "◇ ● ◇ ซ้าย-ขวา" }, { v: "vertical", l: "◇ ● ◇ บน-ล่าง" }].map(({ v, l }) => (
                       <button key={v} onClick={() => setRemDialog(d => ({ ...d, direction: v }))}
-                        style={{ flex: 1, padding: "10px 4px", fontSize: 12, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: remDialog.direction === v ? 700 : 400, background: remDialog.direction === v ? "#1a0f2e" : "transparent", border: `1px solid ${remDialog.direction === v ? REM_DOT_BD : "var(--c-border)"}`, color: remDialog.direction === v ? REM_DOT_COLOR : "var(--c-text-m)" }}>
+                        style={{ flex: 1, padding: "10px 4px", fontSize: 12, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: remDialog.direction === v ? 700 : 400, background: remDialog.direction === v ? LBG.purple : "transparent", border: `1px solid ${remDialog.direction === v ? REM_DOT_BD : "var(--c-border)"}`, color: remDialog.direction === v ? REM_DOT_COLOR : "var(--c-text-m)" }}>
                         {l}
                       </button>
                     ))}
@@ -1444,14 +1449,14 @@ export default function App() {
                 </div>
 
                 {/* สรุป */}
-                <div style={{ background: "#1a0f2e", borderRadius: 4, padding: 12, fontSize: 13, border: `1px solid ${REM_DOT_BD}`, fontFamily: "'Sarabun',sans-serif", color: "var(--c-text)" }}>
+                <div style={{ background: LBG.purple, borderRadius: 4, padding: 12, fontSize: 13, border: `1px solid ${REM_DOT_BD}`, fontFamily: "'Sarabun',sans-serif", color: "var(--c-text)" }}>
                   จะเพิ่มเสาเข็มแก้ไข <span style={{ color: REM_DOT_COLOR, fontWeight: 700 }}>2 ต้น</span> ให้เข็ม #{remDialog.pileId}
                   <br />ประเภท: {remDialog.remCase} · ทิศทาง: {remDialog.direction === "horizontal" ? "ซ้าย-ขวา" : "บน-ล่าง"}
                 </div>
               </div>
 
               <div style={{ padding: "16px 0", display: "flex", gap: 10 }}>
-                <button onClick={applyRemediation} disabled={!canEdit} style={{ flex: 1, padding: "12px", borderRadius: 4, border: `1px solid ${REM_DOT_BD}`, background: "#1a0f2e", color: REM_DOT_COLOR, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 15, opacity: canEdit ? 1 : 0.4 }}>ยืนยัน เพิ่มเข็มแก้ไข</button>
+                <button onClick={applyRemediation} disabled={!canEdit} style={{ flex: 1, padding: "12px", borderRadius: 4, border: `1px solid ${REM_DOT_BD}`, background: LBG.purple, color: REM_DOT_COLOR, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 15, opacity: canEdit ? 1 : 0.4 }}>ยืนยัน เพิ่มเข็มแก้ไข</button>
                 <button onClick={() => setRemDialog(null)} style={{ padding: "12px 16px", borderRadius: 4, border: "1px solid var(--c-border)", background: "var(--c-bg-card)", color: "var(--c-text-m)", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 14 }}>ยกเลิก</button>
               </div>
             </div>
@@ -1468,7 +1473,7 @@ export default function App() {
                 {selCell.pileIds.map(id => {
                   const p = piles[id];
                   return (
-                    <div key={id} onClick={() => openPile(id)} style={{ display: "flex", alignItems: "center", gap: 6, background: p.s === ST.X ? (ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR]).bg : ST_BG[p.s], border: `1px solid ${p.s === ST.X ? (ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR]).bd : ST_BD[p.s]}`, borderRadius: 4, padding: "6px 10px", cursor: "pointer", fontSize: 13, color: "var(--c-text)" }}>
+                    <div key={id} onClick={() => openPile(id)} style={{ display: "flex", alignItems: "center", gap: 6, background: p.s === ST.X ? (LISSUEBG[p.issueColor] || LISSUEBG.red) : LSTBG[p.s], border: `1px solid ${p.s === ST.X ? (ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR]).bd : ST_BD[p.s]}`, borderRadius: 4, padding: "6px 10px", cursor: "pointer", fontSize: 13, color: "var(--c-text)" }}>
                       <div style={{ width: 10, height: 10, borderRadius: "50%", background: p.s === ST.X ? (ISSUE_COLORS[p.issueColor] || ISSUE_COLORS[DEFAULT_ISSUE_COLOR]).dot : ST_DOT[p.s] }} />
                       #{id}
                     </div>
@@ -1480,7 +1485,7 @@ export default function App() {
                   if (!rp) return null;
                   const color = rp.s === ST.D ? "#22c55e" : rp.s === ST.X ? "#ef4444" : REM_DOT_COLOR;
                   return (
-                    <div key={rid} onClick={() => openRemPile(rid)} style={{ display: "flex", alignItems: "center", gap: 6, background: "#1a0f2e", border: `1px solid ${REM_DOT_BD}`, borderRadius: 4, padding: "6px 10px", cursor: "pointer", fontSize: 13, color: "var(--c-text)" }}>
+                    <div key={rid} onClick={() => openRemPile(rid)} style={{ display: "flex", alignItems: "center", gap: 6, background: LBG.purple, border: `1px solid ${REM_DOT_BD}`, borderRadius: 4, padding: "6px 10px", cursor: "pointer", fontSize: 13, color: "var(--c-text)" }}>
                       <div style={{ width: 10, height: 10, background: color, transform: "rotate(45deg)", flexShrink: 0 }} />
                       #{rid}
                     </div>
@@ -1488,8 +1493,8 @@ export default function App() {
                 })}
               </div>
               <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={() => markCell(selCell.pileIds, ST.D)} disabled={!canEdit} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", background: "#0b2117", border: "1px solid #16703a", color: "#22c55e", opacity: canEdit ? 1 : 0.4 }}>✓ กดแล้ว</button>
-                <button onClick={() => canEdit ? setCellIssueMenu(v => !v) : setShowLoginDialog(true)} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", background: "#210b0b", border: "1px solid #8c1c1c", color: "#ef4444", opacity: canEdit ? 1 : 0.4 }}>! ปัญหา ▾</button>
+                <button onClick={() => markCell(selCell.pileIds, ST.D)} disabled={!canEdit} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", background: LBG.green, border: "1px solid #16703a", color: "#22c55e", opacity: canEdit ? 1 : 0.4 }}>✓ กดแล้ว</button>
+                <button onClick={() => canEdit ? setCellIssueMenu(v => !v) : setShowLoginDialog(true)} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", background: LBG.red, border: "1px solid #8c1c1c", color: "#ef4444", opacity: canEdit ? 1 : 0.4 }}>! ปัญหา ▾</button>
                 <button onClick={() => markCell(selCell.pileIds, ST.P)} disabled={!canEdit} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", background: "var(--c-bg-hover)", border: "1px solid var(--c-border-b)", color: "var(--c-text-m)", opacity: canEdit ? 1 : 0.4 }}>↺ รีเซ็ต</button>
               </div>
               {cellIssueMenu && (
@@ -1498,7 +1503,7 @@ export default function App() {
                   {ISSUE_COLOR_KEYS.map(ck => {
                     const ic = ISSUE_COLORS[ck];
                     return (
-                      <button key={ck} onClick={() => markCell(selCell.pileIds, ST.X, ck)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 13, background: ic.bg, border: `1px solid ${ic.bd}`, color: ic.dot }}>
+                      <button key={ck} onClick={() => markCell(selCell.pileIds, ST.X, ck)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 13, background: LISSUEBG[ck] || ic.bg, border: `1px solid ${ic.bd}`, color: ic.dot }}>
                         <div style={{ width: 12, height: 12, borderRadius: "50%", background: ic.dot, flexShrink: 0 }} />
                         {ic.label}
                       </button>
@@ -1557,7 +1562,7 @@ export default function App() {
                         <button onClick={handleOcrRead} disabled={ocrLoading} style={{
                           width: "100%", marginTop: 8, padding: "10px", borderRadius: 4, cursor: ocrLoading ? "wait" : "pointer",
                           fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 13,
-                          background: ocrLoading ? "var(--c-bg-hover)" : "#1a0f2e", border: `1px solid ${ocrLoading ? "var(--c-border-b)" : "#7c3aed"}`,
+                          background: ocrLoading ? "var(--c-bg-hover)" : LBG.purple, border: `1px solid ${ocrLoading ? "var(--c-border-b)" : "#7c3aed"}`,
                           color: ocrLoading ? "var(--c-text-m)" : "#a855f7",
                         }}>
                           {ocrLoading ? (
@@ -1570,7 +1575,7 @@ export default function App() {
                     </div>
                   )}
                   {ocrResult && (
-                    <div style={{ marginTop: 8, background: "#0b2117", borderRadius: 4, padding: 12, border: "1px solid #16703a", fontSize: 12, fontFamily: "'Sarabun',sans-serif" }}>
+                    <div style={{ marginTop: 8, background: LBG.green, borderRadius: 4, padding: 12, border: "1px solid #16703a", fontSize: 12, fontFamily: "'Sarabun',sans-serif" }}>
                       <div style={{ color: "#22c55e", fontWeight: 700, marginBottom: 8 }}>AI อ่านข้อมูลได้:</div>
                       <div style={{ color: "var(--c-text-2)", lineHeight: 2 }}>
                         {ocrResult.pileNo && <div>Pile No: <span style={{ color: "#fbbf24", fontWeight: 700 }}>#{ocrResult.pileNo}</span></div>}
@@ -1582,7 +1587,7 @@ export default function App() {
                         {ocrResult.pressure && <div>Pressure: <span style={{ color: "var(--c-text)" }}>{ocrResult.pressure}</span></div>}
                       </div>
                       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                        <button onClick={applyOcrToForm} style={{ flex: 1, padding: "8px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 13, background: "#0b2117", border: "1px solid #16703a", color: "#22c55e" }}>
+                        <button onClick={applyOcrToForm} style={{ flex: 1, padding: "8px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 13, background: LBG.green, border: "1px solid #16703a", color: "#22c55e" }}>
                           ✓ ใช้ข้อมูลนี้
                         </button>
                         <button onClick={() => setOcrResult(null)} style={{ padding: "8px 12px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 12, background: "transparent", border: "1px solid var(--c-border)", color: "var(--c-text-m)" }}>
@@ -1597,7 +1602,7 @@ export default function App() {
                   <div style={{ fontSize: 11, color: "var(--c-border-b)", marginBottom: 6, fontFamily: "'Sarabun',sans-serif" }}>สถานะเสาเข็ม</div>
                   <div style={{ display: "flex", gap: 6 }}>
                     {Object.entries(ST_TH).map(([k, v]) => (
-                      <button key={k} onClick={() => setForm(f => ({ ...f, s: k, issueColor: k === ST.X ? (f.issueColor || DEFAULT_ISSUE_COLOR) : "" }))} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: form.s === k ? 700 : 400, background: form.s === k ? ST_BG[k] : "transparent", border: `1px solid ${form.s === k ? ST_BD[k] : "var(--c-border)"}`, color: form.s === k ? "var(--c-text)" : "var(--c-border-b)" }}>
+                      <button key={k} onClick={() => setForm(f => ({ ...f, s: k, issueColor: k === ST.X ? (f.issueColor || DEFAULT_ISSUE_COLOR) : "" }))} style={{ flex: 1, padding: "10px 4px", fontSize: 13, borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: form.s === k ? 700 : 400, background: form.s === k ? LSTBG[k] : "transparent", border: `1px solid ${form.s === k ? ST_BD[k] : "var(--c-border)"}`, color: form.s === k ? "var(--c-text)" : "var(--c-border-b)" }}>
                         {v}
                       </button>
                     ))}
@@ -1610,7 +1615,7 @@ export default function App() {
                           const ic = ISSUE_COLORS[ck];
                           const active = form.issueColor === ck;
                           return (
-                            <button key={ck} onClick={() => setForm(f => ({ ...f, issueColor: ck }))} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 12, fontWeight: active ? 700 : 400, background: active ? ic.bg : "transparent", border: `1px solid ${active ? ic.bd : "var(--c-border)"}`, color: active ? ic.dot : "var(--c-text-m)" }}>
+                            <button key={ck} onClick={() => setForm(f => ({ ...f, issueColor: ck }))} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 12, fontWeight: active ? 700 : 400, background: active ? (LISSUEBG[ck] || ic.bg) : "transparent", border: `1px solid ${active ? ic.bd : "var(--c-border)"}`, color: active ? ic.dot : "var(--c-text-m)" }}>
                             <div style={{ width: 10, height: 10, borderRadius: "50%", background: ic.dot, flexShrink: 0 }} />
                             {ic.label}
                           </button>
@@ -1661,7 +1666,7 @@ export default function App() {
 
                 {/* ปุ่มเพิ่มเสาเข็มแก้ไข (เฉพาะเข็มปกติที่เฟล + ยังไม่มี remediation) */}
                 {selPile && piles[selPile]?.s === ST.X && !findRemGroupForPile(remGroups, selPile) && (
-                  <button onClick={() => openRemDialog(selPile)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 14, background: "#1a0f2e", border: `1px solid ${REM_DOT_BD}`, color: REM_DOT_COLOR }}>
+                  <button onClick={() => openRemDialog(selPile)} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px", borderRadius: 4, cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 14, background: LBG.purple, border: `1px solid ${REM_DOT_BD}`, color: REM_DOT_COLOR }}>
                     <div style={{ width: 10, height: 10, background: REM_DOT_COLOR, transform: "rotate(45deg)" }} />
                     เพิ่มเสาเข็มแก้ไข
                   </button>
@@ -1671,14 +1676,14 @@ export default function App() {
                 {selPile && findRemGroupForPile(remGroups, selPile) && (() => {
                   const group = findRemGroupForPile(remGroups, selPile);
                   return (
-                    <div style={{ background: "#1a0f2e", borderRadius: 4, padding: 12, border: `1px solid ${REM_DOT_BD}`, fontSize: 12, fontFamily: "'Sarabun',sans-serif" }}>
+                    <div style={{ background: LBG.purple, borderRadius: 4, padding: 12, border: `1px solid ${REM_DOT_BD}`, fontSize: 12, fontFamily: "'Sarabun',sans-serif" }}>
                       <div style={{ color: REM_DOT_COLOR, fontWeight: 700, marginBottom: 6 }}>เสาเข็มแก้ไข ({group.remCase})</div>
                       <div style={{ color: "var(--c-text-2)", lineHeight: 1.8 }}>
                         ทิศทาง: {group.direction === "horizontal" ? "ซ้าย-ขวา" : "บน-ล่าง"}<br />
                         ระยะห่าง: {group.spacing} ม.<br />
                         เข็มแก้ไข: {group.remPileIds.map(rid => `#${rid}`).join(", ")}
                       </div>
-                      <button onClick={() => removeRemediation(selPile)} disabled={!canEdit} style={{ marginTop: 8, padding: "6px 12px", borderRadius: 4, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", fontSize: 11, background: "#210b0b", border: "1px solid #8c1c1c", color: "#ef4444", opacity: canEdit ? 1 : 0.4 }}>
+                      <button onClick={() => removeRemediation(selPile)} disabled={!canEdit} style={{ marginTop: 8, padding: "6px 12px", borderRadius: 4, cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", fontSize: 11, background: LBG.red, border: "1px solid #8c1c1c", color: "#ef4444", opacity: canEdit ? 1 : 0.4 }}>
                         ลบเข็มแก้ไข
                       </button>
                     </div>
@@ -1728,7 +1733,7 @@ export default function App() {
 
           {(selPile || selRemPile) && form && !remDialog ? (
             <div style={{ padding: 16, borderTop: "1px solid var(--c-border-s)", display: "flex", gap: 10, background: "var(--c-bg-h)" }}>
-              <button onClick={savePile} disabled={!canEdit} style={{ flex: 1, padding: "12px", borderRadius: 4, border: `1px solid ${selRemPile ? REM_DOT_BD : "#16703a"}`, background: selRemPile ? "#1a0f2e" : "#0b2117", color: selRemPile ? REM_DOT_COLOR : "#22c55e", cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 15, opacity: canEdit ? 1 : 0.4 }}>{canEdit ? "บันทึก ☁️" : "🔒 ล็อกอินเพื่อบันทึก"}</button>
+              <button onClick={savePile} disabled={!canEdit} style={{ flex: 1, padding: "12px", borderRadius: 4, border: `1px solid ${selRemPile ? REM_DOT_BD : "#16703a"}`, background: selRemPile ? LBG.purple : LBG.green, color: selRemPile ? REM_DOT_COLOR : "#22c55e", cursor: canEdit ? "pointer" : "not-allowed", fontFamily: "'Sarabun',sans-serif", fontWeight: 700, fontSize: 15, opacity: canEdit ? 1 : 0.4 }}>{canEdit ? "บันทึก ☁️" : "🔒 ล็อกอินเพื่อบันทึก"}</button>
               <button onClick={closePanel} style={{ padding: "12px 16px", borderRadius: 4, border: "1px solid var(--c-border)", background: "var(--c-bg-card)", color: "var(--c-text-m)", cursor: "pointer", fontFamily: "'Sarabun',sans-serif", fontSize: 14 }}>ยกเลิก</button>
             </div>
           ) : !selCell && !remDialog && (
